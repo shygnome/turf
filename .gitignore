@@ -178,6 +178,3 @@ pyrightconfig.json
 # Project specific ignores
 data/
 output/
-
-# Claude Code — personal/sensitive overrides (never commit)
-CLAUDE.local.md
