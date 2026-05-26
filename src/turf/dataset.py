@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-import tomllib
-from dataclasses import dataclass
+import sys
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import typer
@@ -13,12 +18,19 @@ _DEFAULT_ROOT = Path("data")
 
 
 @dataclass
+class PrepareSpec:
+    provider_key: str
+    input_paths: dict[str, str]
+
+
+@dataclass
 class DatasetEntry:
     id: str
     name: str
     provider: str
     path: str
     description: str
+    prepare_spec: PrepareSpec | None = field(default=None)
 
 
 CATALOG: list[DatasetEntry] = [
@@ -28,6 +40,13 @@ CATALOG: list[DatasetEntry] = [
         provider="PFF FC",
         path="FIFA_WC_2022",
         description="PFF FC event and tracking data for the 2022 FIFA World Cup.",
+        prepare_spec=PrepareSpec(
+            provider_key="fifa_wc_2022",
+            input_paths={
+                "event_data_path": "Event Data",
+                "tracking_data_path": "Tracking Data",
+            },
+        ),
     ),
     DatasetEntry(
         id="sb/fifa-wc-2022",
@@ -74,6 +93,20 @@ def set_root(path: Path) -> None:
     config_path.write_text(f'dataset_root = "{safe}"\n', encoding="utf-8")
 
 
+def _run_preprocessing(
+    spec: PrepareSpec,
+    input_kwargs: dict[str, str],
+    out_path: str,
+) -> None:
+    from preprocessing import Space_data  # type: ignore[import-untyped]
+
+    Space_data(
+        data_provider=spec.provider_key,
+        out_path=out_path,
+        **input_kwargs,
+    ).preprocessing()
+
+
 @app.command("ls")
 def ls() -> None:
     """List available datasets and whether they are present locally."""
@@ -94,6 +127,40 @@ def ls() -> None:
             f"{entry.provider:<{prov_w}}  {entry.path:<{path_w}}  {present}"
         )
         typer.echo(row)
+
+
+@app.command("prepare")
+def prepare(
+    dataset_id: str = typer.Argument(..., help="Dataset ID from the catalog."),
+) -> None:
+    """Prepare a dataset for analysis using openstarlab-preprocessing."""
+    entry = next((e for e in CATALOG if e.id == dataset_id), None)
+    if entry is None:
+        typer.echo(f"Unknown dataset: {dataset_id}", err=True)
+        raise typer.Exit(1)
+
+    if entry.prepare_spec is None:
+        typer.echo(f"Dataset '{dataset_id}' does not support prepare.", err=True)
+        raise typer.Exit(1)
+
+    root = get_root()
+    dataset_path = root / entry.path
+    if not dataset_path.exists():
+        typer.echo(
+            f"Dataset not found at {dataset_path}. Place raw data there first.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    spec = entry.prepare_spec
+    out_path = root / "preprocessed" / Path(dataset_id)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    input_kwargs = {k: str(dataset_path / v) for k, v in spec.input_paths.items()}
+
+    typer.echo(f"Preparing {dataset_id} -> {out_path}")
+    _run_preprocessing(spec, input_kwargs, str(out_path))
+    typer.echo("Done.")
 
 
 @app.command("set-root")
