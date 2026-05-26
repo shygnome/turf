@@ -1,12 +1,14 @@
 import typer
 
 from . import __version__
+from . import dataset as _dataset
 
 app = typer.Typer(
     name="turf",
     help="TURF — soccer/football research toolkit.",
     no_args_is_help=True,
 )
+app.add_typer(_dataset.app, name="dataset")
 
 
 @app.callback(invoke_without_command=True)
