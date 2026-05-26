@@ -1,0 +1,41 @@
+[project]
+name = "turf"
+version = "0.1.0"
+description = "Soccer/football research toolkit"
+readme = "README.md"
+authors = [
+    { name = "shygnome", email = "shygnome3@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "typer>=0.25.1",
+]
+
+[project.scripts]
+turf = "turf.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.10.7,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.14",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+strict = true
+python_version = "3.14"
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
