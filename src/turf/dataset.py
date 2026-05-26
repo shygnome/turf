@@ -102,15 +102,17 @@ def ls() -> None:
     id_w, name_w, prov_w, path_w = 20, 22, 10, 30
     cols = (
         f"{'ID':<{id_w}}  {'NAME':<{name_w}}  "
-        f"{'PROVIDER':<{prov_w}}  {'PATH':<{path_w}}  PRESENT"
+        f"{'PROVIDER':<{prov_w}}  {'PATH':<{path_w}}  PRESENT  PREPARED"
     )
     typer.echo(cols)
     typer.echo("-" * len(cols))
     for entry in CATALOG:
         present = "[+]" if (root / entry.path).exists() else "[ ]"
+        prepared = "[p]" if (root / "preprocessed" / Path(entry.id)).exists() else "[ ]"
         row = (
             f"{entry.id:<{id_w}}  {entry.name:<{name_w}}  "
-            f"{entry.provider:<{prov_w}}  {entry.path:<{path_w}}  {present}"
+            f"{entry.provider:<{prov_w}}  {entry.path:<{path_w}}  "
+            f"{present}    {prepared}"
         )
         typer.echo(row)
 

@@ -64,6 +64,26 @@ def test_ls_shows_dataset_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert str(tmp_path) in result.output
 
 
+def test_ls_shows_prepared_when_preprocessed_path_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = CATALOG[0]
+    (tmp_path / "preprocessed" / Path(entry.id)).mkdir(parents=True)
+    monkeypatch.setattr("turf.dataset.get_root", lambda: tmp_path)
+    result = runner.invoke(app, ["dataset", "ls"])
+    assert result.exit_code == 0
+    assert "[p]" in result.output
+
+
+def test_ls_marks_unprepared_when_preprocessed_path_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("turf.dataset.get_root", lambda: tmp_path)
+    result = runner.invoke(app, ["dataset", "ls"])
+    assert result.exit_code == 0
+    assert "[ ]" in result.output
+
+
 def test_set_root_exit_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_file = tmp_path / "config.toml"
     monkeypatch.setattr("turf.dataset.CONFIG_PATH", config_file)
