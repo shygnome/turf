@@ -8,7 +8,7 @@ import typer
 
 app = typer.Typer(help="Manage research datasets.")
 
-CONFIG_PATH: Path = Path.home() / ".turf" / "config.toml"
+CONFIG_PATH: Path = Path("~/.turf/config.toml")
 _DEFAULT_ROOT = Path("data")
 
 
@@ -46,13 +46,21 @@ CATALOG: list[DatasetEntry] = [
 ]
 
 
+def _config_path() -> Path:
+    try:
+        return CONFIG_PATH.expanduser()
+    except RuntimeError:
+        return CONFIG_PATH
+
+
 def get_root() -> Path:
-    if CONFIG_PATH.exists():
+    config_path = _config_path()
+    if config_path.exists():
         try:
-            with CONFIG_PATH.open("rb") as f:
+            with config_path.open("rb") as f:
                 config = tomllib.load(f)
             raw = config.get("dataset_root", None)
-            if isinstance(raw, str):
+            if isinstance(raw, str) and raw.strip():
                 return Path(raw)
         except (OSError, tomllib.TOMLDecodeError):
             pass
@@ -60,9 +68,10 @@ def get_root() -> Path:
 
 
 def set_root(path: Path) -> None:
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    config_path = _config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     safe = path.as_posix().replace("\\", "\\\\").replace('"', '\\"')
-    CONFIG_PATH.write_text(f'dataset_root = "{safe}"\n', encoding="utf-8")
+    config_path.write_text(f'dataset_root = "{safe}"\n', encoding="utf-8")
 
 
 @app.command("ls")

@@ -4,7 +4,7 @@ import pytest
 from typer.testing import CliRunner
 
 from turf.cli import app
-from turf.dataset import CATALOG, DatasetEntry, get_root
+from turf.dataset import CATALOG, DatasetEntry, _config_path, get_root
 
 runner = CliRunner()
 
@@ -124,6 +124,27 @@ def test_get_root_falls_back_when_dataset_root_not_a_string(
     config_file.write_text("dataset_root = 42\n", encoding="utf-8")
     monkeypatch.setattr("turf.dataset.CONFIG_PATH", config_file)
     assert get_root() == Path("data")
+
+
+def test_get_root_falls_back_on_empty_dataset_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text('dataset_root = ""\n', encoding="utf-8")
+    monkeypatch.setattr("turf.dataset.CONFIG_PATH", config_file)
+    assert get_root() == Path("data")
+
+
+def test_config_path_falls_back_when_home_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _NoHomePath(type(Path())):
+        def expanduser(self) -> Path:
+            raise RuntimeError("no home directory")
+
+    monkeypatch.setattr("turf.dataset.CONFIG_PATH", _NoHomePath("~/.turf/config.toml"))
+    result = _config_path()
+    assert result == Path("~/.turf/config.toml")
 
 
 def test_set_root_expands_tilde(
