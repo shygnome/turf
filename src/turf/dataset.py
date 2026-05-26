@@ -26,7 +26,7 @@ CATALOG: list[DatasetEntry] = [
         id="pff/fifa-wc-2022",
         name="FIFA World Cup 2022",
         provider="PFF FC",
-        path="pff_fc/FIFA_WC_2022",
+        path="FIFA_WC_2022",
         description="PFF FC event and tracking data for the 2022 FIFA World Cup.",
     ),
     DatasetEntry(
