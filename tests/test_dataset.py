@@ -23,12 +23,16 @@ def test_catalog_entries_have_required_fields() -> None:
         assert entry.description
 
 
-def test_ls_exit_code() -> None:
+def test_ls_exit_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("turf.dataset.get_root", lambda: tmp_path)
     result = runner.invoke(app, ["dataset", "ls"])
     assert result.exit_code == 0
 
 
-def test_ls_shows_all_catalog_ids() -> None:
+def test_ls_shows_all_catalog_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("turf.dataset.get_root", lambda: tmp_path)
     result = runner.invoke(app, ["dataset", "ls"])
     for entry in CATALOG:
         assert entry.id in result.output
@@ -102,3 +106,33 @@ def test_get_root_defaults_when_no_config(
     config_file = tmp_path / "nonexistent.toml"
     monkeypatch.setattr("turf.dataset.CONFIG_PATH", config_file)
     assert get_root() == Path("data")
+
+
+def test_get_root_falls_back_on_corrupt_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("not valid toml ][", encoding="utf-8")
+    monkeypatch.setattr("turf.dataset.CONFIG_PATH", config_file)
+    assert get_root() == Path("data")
+
+
+def test_get_root_falls_back_when_dataset_root_not_a_string(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("dataset_root = 42\n", encoding="utf-8")
+    monkeypatch.setattr("turf.dataset.CONFIG_PATH", config_file)
+    assert get_root() == Path("data")
+
+
+def test_set_root_expands_tilde(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_file = tmp_path / "config.toml"
+    monkeypatch.setattr("turf.dataset.CONFIG_PATH", config_file)
+    result = runner.invoke(app, ["dataset", "set-root", "~/data"])
+    assert result.exit_code == 0
+    root = get_root()
+    assert "~" not in str(root)
+    assert root.is_absolute()

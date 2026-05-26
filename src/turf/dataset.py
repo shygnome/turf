@@ -48,15 +48,21 @@ CATALOG: list[DatasetEntry] = [
 
 def get_root() -> Path:
     if CONFIG_PATH.exists():
-        with CONFIG_PATH.open("rb") as f:
-            config = tomllib.load(f)
-        return Path(config.get("dataset_root", _DEFAULT_ROOT))
+        try:
+            with CONFIG_PATH.open("rb") as f:
+                config = tomllib.load(f)
+            raw = config.get("dataset_root", None)
+            if isinstance(raw, str):
+                return Path(raw)
+        except (OSError, tomllib.TOMLDecodeError):
+            pass
     return _DEFAULT_ROOT
 
 
 def set_root(path: Path) -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(f'dataset_root = "{path.as_posix()}"\n', encoding="utf-8")
+    safe = path.as_posix().replace("\\", "\\\\").replace('"', '\\"')
+    CONFIG_PATH.write_text(f'dataset_root = "{safe}"\n', encoding="utf-8")
 
 
 @app.command("ls")
@@ -86,6 +92,6 @@ def cmd_set_root(
     path: str = typer.Argument(..., help="Path to the dataset root folder."),
 ) -> None:
     """Set the dataset root folder."""
-    resolved = Path(path)
+    resolved = Path(path).expanduser().resolve()
     set_root(resolved)
-    typer.echo(f"Dataset root set to: {resolved.as_posix()}")
+    typer.echo(f"Dataset root set to: {resolved}")
