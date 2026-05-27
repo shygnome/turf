@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-import tomllib
-from dataclasses import dataclass
+import sys
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import typer
@@ -13,12 +18,19 @@ _DEFAULT_ROOT = Path("data")
 
 
 @dataclass
+class PrepareSpec:
+    provider_key: str
+    input_paths: dict[str, str]
+
+
+@dataclass
 class DatasetEntry:
     id: str
     name: str
     provider: str
     path: str
     description: str
+    prepare_spec: PrepareSpec | None = field(default=None)
 
 
 CATALOG: list[DatasetEntry] = [
@@ -28,6 +40,13 @@ CATALOG: list[DatasetEntry] = [
         provider="PFF FC",
         path="FIFA_WC_2022",
         description="PFF FC event and tracking data for the 2022 FIFA World Cup.",
+        prepare_spec=PrepareSpec(
+            provider_key="fifa_wc_2022",
+            input_paths={
+                "event_data_path": "Event Data",
+                "tracking_data_path": "Tracking Data",
+            },
+        ),
     ),
     DatasetEntry(
         id="sb/fifa-wc-2022",
@@ -83,15 +102,17 @@ def ls() -> None:
     id_w, name_w, prov_w, path_w = 20, 22, 10, 30
     cols = (
         f"{'ID':<{id_w}}  {'NAME':<{name_w}}  "
-        f"{'PROVIDER':<{prov_w}}  {'PATH':<{path_w}}  PRESENT"
+        f"{'PROVIDER':<{prov_w}}  {'PATH':<{path_w}}  PRESENT  PREPARED"
     )
     typer.echo(cols)
     typer.echo("-" * len(cols))
     for entry in CATALOG:
         present = "[+]" if (root / entry.path).exists() else "[ ]"
+        prepared = "[p]" if (root / "preprocessed" / Path(entry.id)).exists() else "[ ]"
         row = (
             f"{entry.id:<{id_w}}  {entry.name:<{name_w}}  "
-            f"{entry.provider:<{prov_w}}  {entry.path:<{path_w}}  {present}"
+            f"{entry.provider:<{prov_w}}  {entry.path:<{path_w}}  "
+            f"{present}    {prepared}"
         )
         typer.echo(row)
 

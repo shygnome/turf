@@ -2,6 +2,7 @@ import typer
 
 from . import __version__
 from . import dataset as _dataset
+from .prepare import prepare as _prepare_cmd
 
 app = typer.Typer(
     name="turf",
@@ -9,6 +10,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(_dataset.app, name="dataset")
+_dataset.app.command("prepare")(_prepare_cmd)
 
 
 @app.callback(invoke_without_command=True)
