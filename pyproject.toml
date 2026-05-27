@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "shygnome", email = "shygnome3@gmail.com" }
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.12"
 dependencies = [
     "openstarlab-preprocessing>=0.1.54",
     "tomli>=2.0.0; python_version < '3.11'",
