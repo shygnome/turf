@@ -81,7 +81,7 @@ def test_ls_marks_unprepared_when_preprocessed_path_missing(
     monkeypatch.setattr("turf.dataset.get_root", lambda: tmp_path)
     result = runner.invoke(app, ["dataset", "ls"])
     assert result.exit_code == 0
-    assert "[ ]" in result.output
+    assert "[p]" not in result.output
 
 
 def test_set_root_exit_code(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -42,10 +42,27 @@ def test_prepare_calls_preprocessing_with_correct_args(
     monkeypatch.setattr("turf.prepare._run_preprocessing", _capture)
     runner.invoke(app, ["dataset", "prepare", entry.id])
     assert len(calls) == 1
-    spec, input_kwargs, out_path = calls[0]
+    spec, input_kwargs, _ = calls[0]
     assert spec is entry.prepare_spec
-    expected_out = str(tmp_path / "preprocessed" / Path(entry.id))
-    assert out_path == expected_out
+    assert entry.prepare_spec is not None
+    dataset_path = tmp_path / entry.path
+    for kwarg, subdir in entry.prepare_spec.input_paths.items():
+        assert input_kwargs[kwarg] == str(dataset_path / subdir)
+
+
+def test_prepare_does_not_create_output_dir_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = next(e for e in CATALOG if e.prepare_spec is not None)
+    _setup_dataset(tmp_path, entry)
+    monkeypatch.setattr("turf.prepare.get_root", lambda: tmp_path)
+
+    def _fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("preprocessing failed")
+
+    monkeypatch.setattr("turf.prepare._run_preprocessing", _fail)
+    runner.invoke(app, ["dataset", "prepare", entry.id])
+    assert not (tmp_path / "preprocessed" / Path(entry.id)).exists()
 
 
 def test_prepare_creates_output_directory(

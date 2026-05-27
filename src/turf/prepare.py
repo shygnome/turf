@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+import tempfile
 from pathlib import Path
 
 import typer
@@ -45,10 +47,18 @@ def prepare(
 
     spec = entry.prepare_spec
     out_path = root / "preprocessed" / Path(dataset_id)
-    out_path.mkdir(parents=True, exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     input_kwargs = {k: str(dataset_path / v) for k, v in spec.input_paths.items()}
 
-    typer.echo(f"Preparing {dataset_id} -> {out_path}")
-    _run_preprocessing(spec, input_kwargs, str(out_path))
+    staging = Path(tempfile.mkdtemp(dir=out_path.parent))
+    try:
+        typer.echo(f"Preparing {dataset_id} -> {out_path}")
+        _run_preprocessing(spec, input_kwargs, str(staging))
+        if out_path.exists():
+            shutil.rmtree(out_path)
+        staging.rename(out_path)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
     typer.echo("Done.")
