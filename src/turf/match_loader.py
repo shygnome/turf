@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pandas as pd  # type: ignore[import-untyped]
+if TYPE_CHECKING:
+    import pandas as pd  # type: ignore[import-untyped]
 
 
 @dataclass
@@ -20,6 +22,8 @@ class MatchLoader:
         self.preprocessed_path: Path = root / "preprocessed" / Path(dataset_id)
 
     def load(self, match_id: str) -> MatchData:
+        import pandas as pd
+
         if not self.preprocessed_path.exists():
             raise FileNotFoundError(
                 f"Preprocessed data not found at {self.preprocessed_path}. "

@@ -94,3 +94,13 @@ def test_total_pages_parametrized(
     items = list(range(total))
     _, total_pages, _ = paginate(items, page=1, per_page=per_page)
     assert total_pages == expected_pages
+
+
+def test_per_page_zero_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="per_page"):
+        paginate(list(range(5)), page=1, per_page=0)
+
+
+def test_per_page_negative_raises_value_error() -> None:
+    with pytest.raises(ValueError, match="per_page"):
+        paginate(list(range(5)), page=1, per_page=-1)

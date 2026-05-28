@@ -220,3 +220,10 @@ def test_prepare_skips_metadata_when_dir_absent(
     monkeypatch.setattr("turf.prepare._run_preprocessing", lambda *a, **kw: None)
     result = runner.invoke(app, ["dataset", "prepare", entry.id])
     assert result.exit_code == 0
+
+
+def test_extract_metadata_empty_dir_does_not_create_csv(tmp_path: Path) -> None:
+    meta_dir = tmp_path / "Metadata"
+    meta_dir.mkdir()
+    _extract_metadata(meta_dir, tmp_path)
+    assert not (tmp_path / "metadata.csv").exists()

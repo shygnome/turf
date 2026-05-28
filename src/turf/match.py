@@ -53,10 +53,14 @@ def _print_table(
     id_w: int = 10,
     match_w: int = 40,
 ) -> None:
-    end = min(start + len(rows) - 1, total)
     header = f"{'MATCH_ID':<{id_w}}  {'HOME vs AWAY':<{match_w}}  DATE"
     typer.echo(header)
     typer.echo("-" * (id_w + 2 + match_w + 2 + 12))
+    if not rows:
+        typer.echo("(no matches)")
+        typer.echo(f"\nPage {page}/{total_pages} (0 of {total} matches).")
+        return
+    end = start + len(rows) - 1
     for mid, vs, date in rows:
         typer.echo(f"{mid:<{id_w}}  {vs:<{match_w}}  {date}")
     typer.echo(
@@ -70,7 +74,7 @@ def _print_table(
 def ls(
     dataset_id: str = typer.Argument(..., help="Dataset ID from the catalog."),
     page: int = typer.Option(1, "--page", "-p", help="Page number."),
-    per_page: int = typer.Option(20, "--per-page", help="Matches per page."),
+    per_page: int = typer.Option(20, "--per-page", help="Matches per page.", min=1),
 ) -> None:
     """List available matches for a prepared dataset."""
     entry = next((e for e in CATALOG if e.id == dataset_id), None)

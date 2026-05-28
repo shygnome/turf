@@ -456,3 +456,38 @@ def test_cli_match_ls_fallback_pagination(
     )
     lines = [ln for ln in result.output.splitlines() if ln and ln[0].isdigit()]
     assert len(lines) == 2
+
+
+# ---------------------------------------------------------------------------
+# CLI — turf match ls edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_cli_match_ls_per_page_zero_exits_nonzero(
+    preprocessed_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("turf.match.get_root", lambda: preprocessed_root)
+    result = runner.invoke(
+        app, ["match", "ls", "pff/fifa-wc-2022", "--per-page", "0"]
+    )
+    assert result.exit_code != 0
+
+
+def test_cli_match_ls_empty_dataset_exit_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = tmp_path / "preprocessed" / "pff" / "fifa-wc-2022"
+    (base / "event").mkdir(parents=True)
+    monkeypatch.setattr("turf.match.get_root", lambda: tmp_path)
+    result = runner.invoke(app, ["match", "ls", "pff/fifa-wc-2022"])
+    assert result.exit_code == 0
+
+
+def test_cli_match_ls_empty_dataset_shows_zero_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = tmp_path / "preprocessed" / "pff" / "fifa-wc-2022"
+    (base / "event").mkdir(parents=True)
+    monkeypatch.setattr("turf.match.get_root", lambda: tmp_path)
+    result = runner.invoke(app, ["match", "ls", "pff/fifa-wc-2022"])
+    assert "0 matches" in result.output

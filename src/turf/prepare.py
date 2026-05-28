@@ -30,7 +30,8 @@ def _extract_metadata(metadata_dir: Path, out_path: Path) -> None:
                 "stadium": data["stadium"]["name"],
             }
         )
-    pd.DataFrame(rows).to_csv(out_path / "metadata.csv", index=False)
+    if rows:
+        pd.DataFrame(rows).to_csv(out_path / "metadata.csv", index=False)
 
 
 def _run_preprocessing(

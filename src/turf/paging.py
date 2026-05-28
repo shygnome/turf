@@ -16,6 +16,8 @@ def paginate(
     Page and total_pages are always >= 1. The page number is clamped so
     out-of-range requests return the nearest valid page.
     """
+    if per_page < 1:
+        raise ValueError(f"per_page must be >= 1, got {per_page}")
     total = len(items)
     total_pages = max(1, (total + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
