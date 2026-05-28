@@ -27,7 +27,7 @@ class MatchLoader:
         if not self.preprocessed_path.exists():
             raise FileNotFoundError(
                 f"Preprocessed data not found at {self.preprocessed_path}. "
-                "Run `turf dataset prepare <dataset_id>` first."
+                f"Run `turf dataset prepare {self.dataset_id}` first."
             )
 
         event_file = self.preprocessed_path / "event" / f"event_data_{match_id}.csv"

@@ -109,7 +109,7 @@ def ls(
             )
             for _, row in df.iterrows()
         ]
-        page_rows, total_pages, start = paginate(all_rows, page, per_page)
+        page_rows, total_pages, start, page = paginate(all_rows, page, per_page)
         _print_table(page_rows, total, page, total_pages, start)
     else:
         event_dir = preprocessed / "event"
@@ -123,5 +123,5 @@ def ls(
         total = len(raw_ids)
         typer.echo(f"Matches in {dataset_id} ({total} matches)\n")
         all_rows = [(mid, "n/a", "n/a") for mid in raw_ids]
-        page_rows, total_pages, start = paginate(all_rows, page, per_page)
+        page_rows, total_pages, start, page = paginate(all_rows, page, per_page)
         _print_table(page_rows, total, page, total_pages, start)

@@ -491,3 +491,21 @@ def test_cli_match_ls_empty_dataset_shows_zero_count(
     monkeypatch.setattr("turf.match.get_root", lambda: tmp_path)
     result = runner.invoke(app, ["match", "ls", "pff/fifa-wc-2022"])
     assert "0 matches" in result.output
+
+
+def test_cli_match_ls_out_of_range_page_shows_clamped_number(
+    preprocessed_root_with_metadata: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("turf.match.get_root", lambda: preprocessed_root_with_metadata)
+    result = runner.invoke(
+        app, ["match", "ls", "pff/fifa-wc-2022", "--page", "99", "--per-page", "2"]
+    )
+    assert "Page 99" not in result.output
+
+
+def test_cli_match_load_error_message_contains_dataset_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("turf.match.get_root", lambda: tmp_path)
+    result = runner.invoke(app, ["match", "load", "pff/fifa-wc-2022", "10502"])
+    assert "pff/fifa-wc-2022" in result.output
