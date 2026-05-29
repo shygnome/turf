@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -7,6 +8,30 @@ from pathlib import Path
 import typer
 
 from turf.dataset import CATALOG, PrepareSpec, get_root
+
+
+def _extract_metadata(metadata_dir: Path, out_path: Path) -> None:
+    import pandas as pd  # type: ignore[import-untyped]
+
+    rows = []
+    for json_file in sorted(metadata_dir.glob("*.json")):
+        with json_file.open(encoding="utf-8") as f:
+            data = json.load(f)[0]
+        rows.append(
+            {
+                "match_id": data["id"],
+                "home_team_id": data["homeTeam"]["id"],
+                "home_team_name": data["homeTeam"]["name"],
+                "home_team_short_name": data["homeTeam"]["shortName"],
+                "away_team_id": data["awayTeam"]["id"],
+                "away_team_name": data["awayTeam"]["name"],
+                "away_team_short_name": data["awayTeam"]["shortName"],
+                "date": data["date"],
+                "stadium": data["stadium"]["name"],
+            }
+        )
+    if rows:
+        pd.DataFrame(rows).to_csv(out_path / "metadata.csv", index=False)
 
 
 def _run_preprocessing(
@@ -55,6 +80,10 @@ def prepare(
     try:
         typer.echo(f"Preparing {dataset_id} -> {out_path}")
         _run_preprocessing(spec, input_kwargs, str(staging))
+        if spec.metadata_path:
+            meta_dir = dataset_path / spec.metadata_path
+            if meta_dir.exists():
+                _extract_metadata(meta_dir, staging)
         if out_path.exists():
             shutil.rmtree(out_path)
         staging.rename(out_path)

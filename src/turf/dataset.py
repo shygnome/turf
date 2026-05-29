@@ -21,6 +21,7 @@ _DEFAULT_ROOT = Path("data")
 class PrepareSpec:
     provider_key: str
     input_paths: dict[str, str]
+    metadata_path: str | None = field(default=None)
 
 
 @dataclass
@@ -46,6 +47,7 @@ CATALOG: list[DatasetEntry] = [
                 "event_data_path": "Event Data",
                 "tracking_data_path": "Tracking Data",
             },
+            metadata_path="Metadata",
         ),
     ),
     DatasetEntry(
