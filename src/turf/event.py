@@ -53,6 +53,11 @@ def extract_cmd(
     label: str = typer.Argument(..., help="Event type label to extract (case-insensitive)."),  # noqa: E501
 ) -> None:
     """Extract tracking frame clips for all occurrences of an event type."""
+    label = label.strip().lower()
+    if not label or "/" in label or "\\" in label:
+        typer.echo("Invalid label.", err=True)
+        raise typer.Exit(1)
+
     entry = next((e for e in CATALOG if e.id == dataset_id), None)
     if entry is None:
         typer.echo(f"Unknown dataset: {dataset_id}", err=True)

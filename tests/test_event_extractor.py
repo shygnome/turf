@@ -14,7 +14,7 @@ def events() -> pd.DataFrame:
             "Team": ["Home", "Home", "Away", "Home"],
             "Type": ["pass", "other", "pass", "pass"],
             "Subtype": ["success", None, "fail", "success"],
-            "Period": [1, 1, 1, 2],
+            "Period": [1, 1, 1, 1],
             "Start Frame": [2, 5, 10, 20],
             "Start Time [s]": [0.06, 0.15, 0.30, 0.60],
             "End Frame": [4, 9, 14, 24],
