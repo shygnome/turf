@@ -2,6 +2,7 @@ import typer
 
 from . import __version__
 from . import dataset as _dataset
+from . import event as _event
 from . import match as _match
 from .prepare import prepare as _prepare_cmd
 
@@ -12,6 +13,7 @@ app = typer.Typer(
 )
 app.add_typer(_dataset.app, name="dataset")
 app.add_typer(_match.app, name="match")
+app.add_typer(_event.app, name="event")
 _dataset.app.command("prepare")(_prepare_cmd)
 
 
