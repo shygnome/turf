@@ -259,7 +259,7 @@ def test_event_extract_frame_column_values(extract_result: tuple) -> None:
 
 def test_event_extract_shows_output_path(extract_result: tuple) -> None:
     result, out_dir = extract_result
-    assert str(out_dir) in result.output or "pass" in result.output
+    assert str(out_dir) in result.output
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd  # type: ignore[import-untyped]
 import typer
 
 from turf.dataset import CATALOG, get_root
@@ -76,8 +75,10 @@ def extract_cmd(
         typer.echo(f"No '{label}' events found in match {match_id}.", err=True)
         raise typer.Exit(1)
 
+    import pandas as pd  # type: ignore[import-untyped]
+
     output_root = get_output_root().resolve()
-    out_dir = (get_output_root() / dataset_id / match_id / label).resolve()
+    out_dir = (output_root / dataset_id / match_id / label).resolve()
     if not out_dir.is_relative_to(output_root):
         typer.echo("Invalid output path.", err=True)
         raise typer.Exit(1)
