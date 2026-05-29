@@ -160,6 +160,41 @@ def test_extract_metadata_fields(match_data: MatchData) -> None:
 
 
 # ---------------------------------------------------------------------------
+# EventExtractor.extract — frame bounds validation
+# ---------------------------------------------------------------------------
+
+
+def test_extract_raises_on_out_of_range_frames() -> None:
+    df = pd.DataFrame(
+        {
+            "Team": ["Home"],
+            "Type": ["pass"],
+            "Subtype": ["success"],
+            "Period": [1],
+            "Start Frame": [50],
+            "Start Time [s]": [1.5],
+            "End Frame": [60],
+            "End Time [s]": [1.8],
+            "From": ["Alice"],
+            "To": ["Bob"],
+            "Start X": [0.0],
+            "Start Y": [0.0],
+            "End X": [1.0],
+            "End Y": [1.0],
+        }
+    )
+    tracking = pd.DataFrame({"Period": range(10), "Home_1_x": range(10)})
+    data = MatchData(
+        match_id="99",
+        events=df,
+        home_tracking=tracking,
+        away_tracking=tracking.rename(columns={"Home_1_x": "Away_1_x"}),
+    )
+    with pytest.raises(ValueError, match="out of bounds"):
+        EventExtractor().extract(data, "pass")
+
+
+# ---------------------------------------------------------------------------
 # EventClip — edge case: single-frame event (start == end)
 # ---------------------------------------------------------------------------
 

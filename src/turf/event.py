@@ -54,7 +54,7 @@ def extract_cmd(
 ) -> None:
     """Extract tracking frame clips for all occurrences of an event type."""
     label = label.strip().lower()
-    if not label or "/" in label or "\\" in label:
+    if not label or "/" in label or "\\" in label or label in (".", ".."):
         typer.echo("Invalid label.", err=True)
         raise typer.Exit(1)
 
@@ -76,7 +76,11 @@ def extract_cmd(
         typer.echo(f"No '{label}' events found in match {match_id}.", err=True)
         raise typer.Exit(1)
 
-    out_dir = get_output_root() / dataset_id / match_id / label.lower()
+    output_root = get_output_root().resolve()
+    out_dir = (get_output_root() / dataset_id / match_id / label).resolve()
+    if not out_dir.is_relative_to(output_root):
+        typer.echo("Invalid output path.", err=True)
+        raise typer.Exit(1)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     pd.DataFrame([c.metadata for c in clips]).to_csv(

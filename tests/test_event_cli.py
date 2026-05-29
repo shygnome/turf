@@ -320,3 +320,15 @@ def test_event_extract_unknown_label_exits_nonzero(
         app, ["event", "extract", "pff/fifa-wc-2022", "10502", "tackle"]
     )
     assert result.exit_code != 0
+
+
+def test_event_extract_dotdot_label_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    result = runner.invoke(
+        app, ["event", "extract", "pff/fifa-wc-2022", "10502", ".."]
+    )
+    assert result.exit_code != 0

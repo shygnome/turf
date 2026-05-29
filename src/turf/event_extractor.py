@@ -44,14 +44,23 @@ class EventExtractor:
                 "subtype": row["Subtype"],
                 "period": int(row["Period"]),
             }
+            expected = end - start + 1
+            home_frames = match_data.home_tracking.iloc[start : end + 1].copy()
+            away_frames = match_data.away_tracking.iloc[start : end + 1].copy()
+            if len(home_frames) != expected or len(away_frames) != expected:
+                raise ValueError(
+                    f"Frame range [{start}, {end}] out of bounds "
+                    f"(home tracking: {len(match_data.home_tracking)} rows, "
+                    f"away tracking: {len(match_data.away_tracking)} rows)."
+                )
             clips.append(
                 EventClip(
                     event_idx=event_idx,
                     start_frame=start,
                     end_frame=end,
                     metadata=meta,
-                    home_frames=match_data.home_tracking.iloc[start : end + 1].copy(),
-                    away_frames=match_data.away_tracking.iloc[start : end + 1].copy(),
+                    home_frames=home_frames,
+                    away_frames=away_frames,
                 )
             )
         return clips
