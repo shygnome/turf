@@ -415,9 +415,7 @@ def test_cli_match_ls_per_page_limits_rows(
     preprocessed_root_with_metadata: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("turf.match.get_root", lambda: preprocessed_root_with_metadata)
-    result = runner.invoke(
-        app, ["match", "ls", "pff/fifa-wc-2022", "--per-page", "2"]
-    )
+    result = runner.invoke(app, ["match", "ls", "pff/fifa-wc-2022", "--per-page", "2"])
     lines = [ln for ln in result.output.splitlines() if ln and ln[0].isdigit()]
     assert len(lines) == 2
 
@@ -441,9 +439,7 @@ def test_cli_match_ls_shows_page_footer(
     preprocessed_root_with_metadata: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("turf.match.get_root", lambda: preprocessed_root_with_metadata)
-    result = runner.invoke(
-        app, ["match", "ls", "pff/fifa-wc-2022", "--per-page", "2"]
-    )
+    result = runner.invoke(app, ["match", "ls", "pff/fifa-wc-2022", "--per-page", "2"])
     assert "Page 1" in result.output
 
 
@@ -451,9 +447,7 @@ def test_cli_match_ls_fallback_pagination(
     preprocessed_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("turf.match.get_root", lambda: preprocessed_root)
-    result = runner.invoke(
-        app, ["match", "ls", "pff/fifa-wc-2022", "--per-page", "2"]
-    )
+    result = runner.invoke(app, ["match", "ls", "pff/fifa-wc-2022", "--per-page", "2"])
     lines = [ln for ln in result.output.splitlines() if ln and ln[0].isdigit()]
     assert len(lines) == 2
 
@@ -467,9 +461,7 @@ def test_cli_match_ls_per_page_zero_exits_nonzero(
     preprocessed_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("turf.match.get_root", lambda: preprocessed_root)
-    result = runner.invoke(
-        app, ["match", "ls", "pff/fifa-wc-2022", "--per-page", "0"]
-    )
+    result = runner.invoke(app, ["match", "ls", "pff/fifa-wc-2022", "--per-page", "0"])
     assert result.exit_code != 0
 
 

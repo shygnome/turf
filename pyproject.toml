@@ -8,8 +8,12 @@ authors = [
 ]
 requires-python = ">=3.10,<3.12"
 dependencies = [
+    "mplsoccer>=1.6.1",
     "openstarlab-preprocessing>=0.1.54",
+    "pillow>=12.2.0",
+    "scipy>=1.10.1",
     "tomli>=2.0.0; python_version < '3.11'",
+    "tqdm>=4.67.3",
     "typer>=0.25.1",
 ]
 

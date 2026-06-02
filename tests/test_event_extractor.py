@@ -16,9 +16,9 @@ def events() -> pd.DataFrame:
             "Subtype": ["success", None, "fail", "success"],
             "Period": [1, 1, 1, 1],
             "Start Frame": [2, 5, 10, 20],
-            "Start Time [s]": [0.06, 0.15, 0.30, 0.60],
+            "Start Time [s]": [2.0, 5.0, 10.0, 20.0],
             "End Frame": [4, 9, 14, 24],
-            "End Time [s]": [0.12, 0.28, 0.44, 0.76],
+            "End Time [s]": [4.0, 9.0, 14.0, 24.0],
             "From": ["Alice", "Bob", "Charlie", "Alice"],
             "To": ["Bob", None, "Dave", "Charlie"],
             "Start X": [0.1, -5.0, 10.0, 3.0],
@@ -35,7 +35,7 @@ def home_tracking() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "Period": [1] * n,
-            "Time [s]": [i * 0.04 for i in range(n)],
+            "Time [s]": [float(i) for i in range(n)],
             "Home_1_x": [float(i) for i in range(n)],
             "Home_1_y": [float(i) * 0.5 for i in range(n)],
             "ball_x": [float(i) * 0.1 for i in range(n)],
@@ -50,7 +50,7 @@ def away_tracking() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "Period": [1] * n,
-            "Time [s]": [i * 0.04 for i in range(n)],
+            "Time [s]": [float(i) for i in range(n)],
             "Away_1_x": [float(-i) for i in range(n)],
             "Away_1_y": [float(-i) * 0.5 for i in range(n)],
             "ball_x": [float(i) * 0.1 for i in range(n)],
@@ -148,6 +148,8 @@ def test_extract_metadata_fields(match_data: MatchData) -> None:
     meta = EventExtractor().extract(match_data, "pass")[0].metadata
     assert meta["start_frame"] == 2
     assert meta["end_frame"] == 4
+    assert meta["start_time"] == pytest.approx(2.0)
+    assert meta["end_time"] == pytest.approx(4.0)
     assert meta["start_x"] == pytest.approx(0.1)
     assert meta["start_y"] == pytest.approx(0.2)
     assert meta["end_x"] == pytest.approx(1.0)
@@ -172,9 +174,9 @@ def test_extract_raises_on_out_of_range_frames() -> None:
             "Subtype": ["success"],
             "Period": [1],
             "Start Frame": [50],
-            "Start Time [s]": [1.5],
+            "Start Time [s]": [50.0],
             "End Frame": [60],
-            "End Time [s]": [1.8],
+            "End Time [s]": [60.0],
             "From": ["Alice"],
             "To": ["Bob"],
             "Start X": [0.0],
@@ -183,14 +185,21 @@ def test_extract_raises_on_out_of_range_frames() -> None:
             "End Y": [1.0],
         }
     )
-    tracking = pd.DataFrame({"Period": range(10), "Home_1_x": range(10)})
+    # Tracking only has period 2; event is period 1 → no frames found
+    tracking = pd.DataFrame(
+        {
+            "Period": [2] * 10,
+            "Time [s]": [float(i) for i in range(10)],
+            "Home_1_x": range(10),
+        }
+    )
     data = MatchData(
         match_id="99",
         events=df,
         home_tracking=tracking,
         away_tracking=tracking.rename(columns={"Home_1_x": "Away_1_x"}),
     )
-    with pytest.raises(ValueError, match="out of bounds"):
+    with pytest.raises(ValueError, match="No tracking frames found"):
         EventExtractor().extract(data, "pass")
 
 
@@ -207,9 +216,9 @@ def test_extract_single_frame_event_has_one_row() -> None:
             "Subtype": ["success"],
             "Period": [1],
             "Start Frame": [5],
-            "Start Time [s]": [0.15],
+            "Start Time [s]": [5.0],
             "End Frame": [5],
-            "End Time [s]": [0.15],
+            "End Time [s]": [5.0],
             "From": ["Alice"],
             "To": ["Bob"],
             "Start X": [0.0],
@@ -218,7 +227,13 @@ def test_extract_single_frame_event_has_one_row() -> None:
             "End Y": [0.0],
         }
     )
-    tracking = pd.DataFrame({"Period": range(10), "Home_1_x": range(10)})
+    tracking = pd.DataFrame(
+        {
+            "Period": [1] * 10,
+            "Time [s]": [float(i) for i in range(10)],
+            "Home_1_x": range(10),
+        }
+    )
     data = MatchData(
         match_id="99",
         events=df,
