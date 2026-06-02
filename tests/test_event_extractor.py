@@ -208,6 +208,47 @@ def test_extract_raises_on_out_of_range_frames() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_extract_frames_exclude_wrong_period_rows() -> None:
+    """When tracking rows from multiple periods are interleaved, the extracted
+    clip must contain only rows from the event's period, not neighbours."""
+    df = pd.DataFrame(
+        {
+            "Team": ["Home"],
+            "Type": ["pass"],
+            "Subtype": ["success"],
+            "Period": [1],
+            "Start Frame": [0],
+            "Start Time [s]": [0.0],
+            "End Frame": [2],
+            "End Time [s]": [2.0],
+            "From": ["Alice"],
+            "To": ["Bob"],
+            "Start X": [0.0],
+            "Start Y": [0.0],
+            "End X": [1.0],
+            "End Y": [1.0],
+        }
+    )
+    # Interleaved periods: P1 rows at labels 0, 2, 4; P2 rows at labels 1, 3
+    tracking = pd.DataFrame(
+        {
+            "Period": [1, 2, 1, 2, 1],
+            "Time [s]": [0.0, 0.0, 1.0, 1.0, 2.0],
+            "Home_1_x": [1.0, 99.0, 2.0, 99.0, 3.0],
+        }
+    )
+    data = MatchData(
+        match_id="99",
+        events=df,
+        home_tracking=tracking,
+        away_tracking=tracking.rename(columns={"Home_1_x": "Away_1_x"}),
+    )
+    clips = EventExtractor().extract(data, "pass")
+    assert len(clips) == 1
+    assert (clips[0].home_frames["Period"] == 1).all()
+    assert 99.0 not in clips[0].home_frames["Home_1_x"].tolist()
+
+
 def test_extract_clips_valid_when_end_snaps_before_start() -> None:
     """Non-monotonic tracking timestamps can cause end_label < start_label via idxmin().
     The extractor must clamp end_label to start_label so the .loc slice is non-empty."""

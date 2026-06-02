@@ -55,8 +55,8 @@ class EventExtractor:
             if end_label < start_label:
                 end_label = start_label
 
-            home_frames = match_data.home_tracking.loc[start_label:end_label].copy()
-            away_frames = match_data.away_tracking.loc[start_label:end_label].copy()
+            home_frames = home_period.loc[start_label:end_label].copy()
+            away_frames = away_period.loc[start_label:end_label].copy()
 
             if len(home_frames) == 0 or len(away_frames) == 0:
                 raise ValueError(
