@@ -52,6 +52,8 @@ class EventExtractor:
             # Snap to the nearest tracking frame for start and end times
             start_label = int((home_period[_TIME_COL] - start_time).abs().idxmin())
             end_label = int((home_period[_TIME_COL] - end_time).abs().idxmin())
+            if end_label < start_label:
+                end_label = start_label
 
             home_frames = match_data.home_tracking.loc[start_label:end_label].copy()
             away_frames = match_data.away_tracking.loc[start_label:end_label].copy()

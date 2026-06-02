@@ -125,10 +125,16 @@ class EventVisualizer:
 
             if hx:
                 home_scat.set_offsets(list(zip(hx, hy, strict=True)))
+            else:
+                home_scat.set_offsets([])
             if ax_x:
                 away_scat.set_offsets(list(zip(ax_x, ay, strict=True)))
+            else:
+                away_scat.set_offsets([])
             if bx is not None:
                 ball_scat.set_offsets([[bx, by]])
+            else:
+                ball_scat.set_offsets([])
 
             ts = self._frame_timestamp_str(row_home, clip.metadata["period"])
             title.set_text(f"{label.capitalize()} | {ts}")
@@ -159,6 +165,8 @@ class EventVisualizer:
         coord_cols = [c for c in frames.columns if c.endswith(("_x", "_y"))]
         # window_length must be odd and ≤ number of valid data points
         w = window if window % 2 == 1 else window - 1
+        if w <= polyorder:
+            return result
         for col in coord_cols:
             series = result[col]
             valid = series.notna()

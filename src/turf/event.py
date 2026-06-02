@@ -129,6 +129,10 @@ def visualize_cmd(
         typer.echo("Invalid label.", err=True)
         raise typer.Exit(1)
 
+    if fps <= 0:
+        typer.echo("--fps must be a positive number.", err=True)
+        raise typer.Exit(1)
+
     entry = next((e for e in CATALOG if e.id == dataset_id), None)
     if entry is None:
         typer.echo(f"Unknown dataset: {dataset_id}", err=True)

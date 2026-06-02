@@ -637,3 +637,31 @@ def test_event_visualize_dotdot_label_exits_nonzero(
         app, ["event", "visualize", "pff/fifa-wc-2022", "10502", ".."]
     )
     assert result.exit_code != 0
+
+
+def test_event_visualize_zero_fps_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _mock_visualizer(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass", "--fps", "0"],
+    )
+    assert result.exit_code != 0
+
+
+def test_event_visualize_negative_fps_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _mock_visualizer(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass", "--fps", "-5"],
+    )
+    assert result.exit_code != 0

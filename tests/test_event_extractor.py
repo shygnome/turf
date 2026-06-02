@@ -208,6 +208,46 @@ def test_extract_raises_on_out_of_range_frames() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_extract_clips_valid_when_end_snaps_before_start() -> None:
+    """Non-monotonic tracking timestamps can cause end_label < start_label via idxmin().
+    The extractor must clamp end_label to start_label so the .loc slice is non-empty."""
+    df = pd.DataFrame(
+        {
+            "Team": ["Home"],
+            "Type": ["pass"],
+            "Subtype": ["success"],
+            "Period": [1],
+            "Start Frame": [5],
+            "Start Time [s]": [3.0],  # nearest row: label=1 (Time=3.0)
+            "End Frame": [10],
+            "End Time [s]": [5.0],  # nearest row: label=0 (Time=5.0) → end < start
+            "From": ["Alice"],
+            "To": ["Bob"],
+            "Start X": [0.0],
+            "Start Y": [0.0],
+            "End X": [1.0],
+            "End Y": [1.0],
+        }
+    )
+    # Non-monotonic timestamps: label 0→Time=5, label 1→Time=3, label 2→Time=7
+    tracking = pd.DataFrame(
+        {
+            "Period": [1, 1, 1],
+            "Time [s]": [5.0, 3.0, 7.0],
+            "Home_1_x": [10.0, 20.0, 30.0],
+        }
+    )
+    data = MatchData(
+        match_id="99",
+        events=df,
+        home_tracking=tracking,
+        away_tracking=tracking.rename(columns={"Home_1_x": "Away_1_x"}),
+    )
+    clips = EventExtractor().extract(data, "pass")
+    assert len(clips) == 1
+    assert len(clips[0].home_frames) >= 1
+
+
 def test_extract_single_frame_event_has_one_row() -> None:
     df = pd.DataFrame(
         {

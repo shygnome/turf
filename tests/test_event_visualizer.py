@@ -228,6 +228,15 @@ class TestSmoothFrames:
         smoothed = EventVisualizer()._smooth_frames(clip.home_frames)
         assert smoothed["Home_1_x"].tolist() == original
 
+    def test_invalid_polyorder_returns_unchanged(self) -> None:
+        # polyorder=5 > window=3 → savgol_filter would raise; guard must skip smoothing
+        clip = _make_clip(n_frames=10)
+        original = clip.home_frames["Home_1_x"].tolist()
+        smoothed = EventVisualizer()._smooth_frames(
+            clip.home_frames, window=3, polyorder=5
+        )
+        assert smoothed["Home_1_x"].tolist() == original
+
 
 # ---------------------------------------------------------------------------
 # freeze_frame
@@ -396,3 +405,112 @@ class TestAnimate:
             clip, "pass", smooth=True, smooth_window=7, smooth_polyorder=1
         )
         assert isinstance(anim, FuncAnimation)
+
+    def test_nan_frame_clears_home_scatter(self) -> None:
+        """All-NaN positions in a frame must clear home_scat, not leave stale points."""
+        from unittest.mock import MagicMock, call, patch
+
+        home_rows = [
+            {
+                "Period": 1,
+                "Time [s]": 0.0,
+                "Home_1_x": 10.0,
+                "Home_1_y": 5.0,
+                "Home_2_x": float("nan"),
+                "Home_2_y": float("nan"),
+                "ball_x": 0.5,
+                "ball_y": 1.0,
+            },
+            {
+                "Period": 1,
+                "Time [s]": 1.0,
+                "Home_1_x": float("nan"),
+                "Home_1_y": float("nan"),
+                "Home_2_x": float("nan"),
+                "Home_2_y": float("nan"),
+                "ball_x": float("nan"),
+                "ball_y": float("nan"),
+            },
+        ]
+        away_rows = [
+            {
+                "Period": 1,
+                "Time [s]": 0.0,
+                "Away_1_x": -10.0,
+                "Away_1_y": -5.0,
+                "Away_2_x": float("nan"),
+                "Away_2_y": float("nan"),
+                "ball_x": 0.5,
+                "ball_y": 1.0,
+            },
+            {
+                "Period": 1,
+                "Time [s]": 1.0,
+                "Away_1_x": float("nan"),
+                "Away_1_y": float("nan"),
+                "Away_2_x": float("nan"),
+                "Away_2_y": float("nan"),
+                "ball_x": float("nan"),
+                "ball_y": float("nan"),
+            },
+        ]
+        clip = EventClip(
+            event_idx=0,
+            start_frame=0,
+            end_frame=1,
+            metadata={
+                "event_idx": 0,
+                "start_frame": 0,
+                "end_frame": 1,
+                "start_x": 0.0,
+                "start_y": 0.0,
+                "end_x": 1.0,
+                "end_y": 0.0,
+                "from_player": "A",
+                "to_player": "B",
+                "team": "Home",
+                "subtype": "success",
+                "period": 1,
+            },
+            home_frames=pd.DataFrame(home_rows),
+            away_frames=pd.DataFrame(away_rows),
+        )
+
+        captured_scats: list[MagicMock] = []
+        captured_update: list[object] = []
+
+        with patch("turf.event_visualizer.Pitch") as MockPitch, patch(
+            "turf.event_visualizer.FuncAnimation"
+        ) as MockFA:
+            # Capture the _update closure without letting FuncAnimation run it
+            def _capture_anim(
+                _fig: object, func: object, **_kw: object
+            ) -> MagicMock:
+                captured_update.append(func)
+                return MagicMock()
+
+            MockFA.side_effect = _capture_anim
+
+            mock_pitch_instance = MagicMock()
+            MockPitch.return_value = mock_pitch_instance
+            fig, real_ax = plt.subplots()
+
+            def _capturing_scatter(*_args: object, **_kwargs: object) -> MagicMock:
+                m: MagicMock = MagicMock()
+                captured_scats.append(m)
+                return m
+
+            real_ax.scatter = _capturing_scatter  # type: ignore[method-assign]
+            mock_pitch_instance.draw.return_value = (fig, real_ax)
+
+            EventVisualizer().animate(clip, "pass")
+            update_fn = captured_update[0]
+            assert callable(update_fn)
+            update_fn(0)  # type: ignore[operator]  # valid frame → set_offsets with data
+            update_fn(1)  # type: ignore[operator]  # all-NaN → must call set_offsets([])
+            plt.close(fig)
+
+        # captured_scats[0] is home_scat (first scatter call in animate())
+        home_scat = captured_scats[0]
+        assert home_scat.set_offsets.called
+        assert home_scat.set_offsets.call_args == call([])
