@@ -178,3 +178,4 @@ pyrightconfig.json
 # Project specific ignores
 data/
 output/
+CLAUDE.md
