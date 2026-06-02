@@ -54,7 +54,6 @@ class EventExtractor:
             nxt = next_events.iloc[0]
             result[event_idx] = {
                 "end_time": float(nxt[_START_TIME_COL]),
-                "end_frame": int(nxt["Start Frame"]),
                 "end_x": float(nxt["Start X"]),
                 "end_y": float(nxt["Start Y"]),
             }
