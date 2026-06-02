@@ -240,26 +240,49 @@ def test_event_extract_frames_have_frame_column(extract_result: tuple) -> None:
 def test_event_extract_first_home_frames_row_count(extract_result: tuple) -> None:
     _, out_dir = extract_result
     df = pd.read_csv(out_dir / "frames_home_0.csv")
-    # event 0: time [2.0, 4.0] → tracking rows 2, 3, 4 = 3 rows
-    assert len(df) == 3
+    # event 0: inferred end = next event (other) at t=5.0 → rows 2,3,4,5 = 4
+    assert len(df) == 4
 
 
 def test_event_extract_first_away_frames_row_count(extract_result: tuple) -> None:
     _, out_dir = extract_result
     df = pd.read_csv(out_dir / "frames_away_0.csv")
-    assert len(df) == 3
+    assert len(df) == 4
 
 
 def test_event_extract_frame_column_values(extract_result: tuple) -> None:
     _, out_dir = extract_result
     df = pd.read_csv(out_dir / "frames_home_0.csv")
-    # event 0: start_frame=2 → frame column should be [2, 3, 4]
-    assert df["frame"].tolist() == [2, 3, 4]
+    # event 0: inferred end t=5.0 → frame column [2, 3, 4, 5]
+    assert df["frame"].tolist() == [2, 3, 4, 5]
 
 
 def test_event_extract_shows_output_path(extract_result: tuple) -> None:
     result, out_dir = extract_result
     assert str(out_dir) in result.output
+
+
+def test_event_extract_no_infer_endpoints_flag(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    runner.invoke(
+        app,
+        [
+            "event",
+            "extract",
+            "pff/fifa-wc-2022",
+            "10502",
+            "pass",
+            "--no-infer-endpoints",
+        ],
+    )
+    out_dir = output_root / "pff" / "fifa-wc-2022" / "10502" / "pass"
+    df = pd.read_csv(out_dir / "frames_home_0.csv")
+    # without inference, event 0 uses raw end t=4.0 → rows 2,3,4 = 3
+    assert df["frame"].tolist() == [2, 3, 4]
 
 
 # ---------------------------------------------------------------------------

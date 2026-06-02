@@ -479,13 +479,12 @@ class TestAnimate:
         captured_scats: list[MagicMock] = []
         captured_update: list[object] = []
 
-        with patch("turf.event_visualizer.Pitch") as MockPitch, patch(
-            "turf.event_visualizer.FuncAnimation"
-        ) as MockFA:
+        with (
+            patch("turf.event_visualizer.Pitch") as MockPitch,
+            patch("turf.event_visualizer.FuncAnimation") as MockFA,
+        ):
             # Capture the _update closure without letting FuncAnimation run it
-            def _capture_anim(
-                _fig: object, func: object, **_kw: object
-            ) -> MagicMock:
+            def _capture_anim(_fig: object, func: object, **_kw: object) -> MagicMock:
                 captured_update.append(func)
                 return MagicMock()
 
