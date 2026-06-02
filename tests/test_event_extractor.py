@@ -332,51 +332,67 @@ def test_extract_single_frame_event_has_one_row() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_extract_pass_infers_end_coords_from_next_event(
+def test_extract_pass_inferred_end_coords_stored_separately(
     match_data: MatchData,
 ) -> None:
     clips = EventExtractor().extract(match_data, "pass")
-    # clip 0: pass at t=2.0; next event is 'other' at t=5.0 (Start X=-5.0, Start Y=-3.0)
-    assert clips[0].metadata["end_x"] == pytest.approx(-5.0)
-    assert clips[0].metadata["end_y"] == pytest.approx(-3.0)
+    # clip 0: next event is 'other' at t=5.0 (Start X=-5.0, Start Y=-3.0)
+    # original PFF end_x/y unchanged; inferred values in dedicated columns
+    assert clips[0].metadata["end_x"] == pytest.approx(1.0)
+    assert clips[0].metadata["end_y"] == pytest.approx(1.2)
+    assert clips[0].metadata["inferred_end_x"] == pytest.approx(-5.0)
+    assert clips[0].metadata["inferred_end_y"] == pytest.approx(-3.0)
 
 
-def test_extract_pass_infers_end_time_and_frame(match_data: MatchData) -> None:
+def test_extract_pass_inferred_end_time_stored_separately(
+    match_data: MatchData,
+) -> None:
     clips = EventExtractor().extract(match_data, "pass")
-    # clip 0: next event at t=5.0, Start Frame=5 → tracking snaps to label 5
-    assert clips[0].metadata["end_time"] == pytest.approx(5.0)
+    # original PFF end_time unchanged; inferred values in dedicated columns
+    assert clips[0].metadata["end_time"] == pytest.approx(4.0)
+    assert clips[0].metadata["inferred_end_time"] == pytest.approx(5.0)
+
+
+def test_extract_pass_end_frame_reflects_inferred_clip_boundary(
+    match_data: MatchData,
+) -> None:
+    clips = EventExtractor().extract(match_data, "pass")
+    # clip frame slice uses inferred end_time → end_frame = tracking snap of t=5.0 = 5
     assert clips[0].end_frame == 5
 
 
 def test_extract_pass_inferred_frames_extended(match_data: MatchData) -> None:
     clips = EventExtractor().extract(match_data, "pass")
-    # clip 0: start t=2 → end t=5 (inferred) → tracking rows 2,3,4,5 = 4 rows
+    # clip 0: start t=2 → inferred end t=5 → tracking rows 2,3,4,5 = 4 rows
     assert len(clips[0].home_frames) == 4
     assert len(clips[0].away_frames) == 4
 
 
-def test_extract_pass_last_in_period_keeps_original_coords(
+def test_extract_pass_last_in_period_has_null_inferred_columns(
     match_data: MatchData,
 ) -> None:
     clips = EventExtractor().extract(match_data, "pass")
-    # clip 2 (t=20.0): last event in period — no successor, original End X/Y preserved
-    assert clips[2].metadata["end_x"] == pytest.approx(4.0)
-    assert clips[2].metadata["end_y"] == pytest.approx(2.0)
+    # clip 2 (t=20.0): no successor — inferred columns are None
+    assert clips[2].metadata["inferred_end_x"] is None
+    assert clips[2].metadata["inferred_end_y"] is None
+    assert clips[2].metadata["inferred_end_time"] is None
 
 
-def test_extract_infer_endpoints_false_keeps_raw_coords(
+def test_extract_infer_endpoints_false_has_null_inferred_columns(
     match_data: MatchData,
 ) -> None:
     clips = EventExtractor().extract(match_data, "pass", infer_endpoints=False)
     assert clips[0].metadata["end_x"] == pytest.approx(1.0)
-    assert clips[0].metadata["end_y"] == pytest.approx(1.2)
+    assert clips[0].metadata["inferred_end_x"] is None
+    assert clips[0].metadata["inferred_end_time"] is None
 
 
-def test_extract_non_pass_label_not_inferred(match_data: MatchData) -> None:
+def test_extract_non_pass_label_has_null_inferred_columns(
+    match_data: MatchData,
+) -> None:
     clips = EventExtractor().extract(match_data, "other")
-    # 'other' is not in the inferred labels; original End X/Y must be preserved
     assert clips[0].metadata["end_x"] == pytest.approx(-4.0)
-    assert clips[0].metadata["end_y"] == pytest.approx(-2.5)
+    assert clips[0].metadata["inferred_end_x"] is None
 
 
 def test_extract_cross_infers_endpoints(
@@ -408,6 +424,7 @@ def test_extract_cross_infers_endpoints(
         away_tracking=away_tracking,
     )
     clips = EventExtractor().extract(data, "cross")
-    # Only 1 cross; next event is pass at t=10.0 (Start X=30.0, Start Y=5.0)
-    assert clips[0].metadata["end_x"] == pytest.approx(30.0)
-    assert clips[0].metadata["end_y"] == pytest.approx(5.0)
+    # original PFF end unchanged; inferred from next event (pass at t=10.0)
+    assert clips[0].metadata["end_x"] == pytest.approx(20.0)
+    assert clips[0].metadata["inferred_end_x"] == pytest.approx(30.0)
+    assert clips[0].metadata["inferred_end_y"] == pytest.approx(5.0)

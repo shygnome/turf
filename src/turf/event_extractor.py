@@ -76,14 +76,10 @@ class EventExtractor:
         clips: list[EventClip] = []
         for event_idx, (_, row) in enumerate(matching.iterrows()):
             start_time = float(row[_START_TIME_COL])
-            end_time = float(row["End Time [s]"])
-            end_x: object = row["End X"]
-            end_y: object = row["End Y"]
-            if event_idx in inferred:
-                inf = inferred[event_idx]
-                end_time = float(inf["end_time"])  # type: ignore[arg-type]
-                end_x = inf["end_x"]
-                end_y = inf["end_y"]
+            raw_end_time = float(row["End Time [s]"])
+            inf = inferred.get(event_idx)
+            # Use inferred end time for clip slicing when available; raw otherwise
+            snap_end_time = float(inf["end_time"]) if inf else raw_end_time  # type: ignore[arg-type]
             period = int(row[_PERIOD_COL])
 
             # Filter to matching period so we don't snap across half-time boundary
@@ -101,7 +97,7 @@ class EventExtractor:
 
             # Snap to the nearest tracking frame for start and end times
             start_label = int((home_period[_TIME_COL] - start_time).abs().idxmin())
-            end_label = int((home_period[_TIME_COL] - end_time).abs().idxmin())
+            end_label = int((home_period[_TIME_COL] - snap_end_time).abs().idxmin())
             if end_label < start_label:
                 end_label = start_label
 
@@ -111,7 +107,7 @@ class EventExtractor:
             if len(home_frames) == 0 or len(away_frames) == 0:
                 raise ValueError(
                     f"No tracking frames found for event {event_idx} "
-                    f"in time range [{start_time}, {end_time}]."
+                    f"in time range [{start_time}, {snap_end_time}]."
                 )
 
             start = int(home_frames.index[0])
@@ -121,11 +117,14 @@ class EventExtractor:
                 "start_frame": start,
                 "end_frame": end,
                 "start_time": start_time,
-                "end_time": end_time,
+                "end_time": raw_end_time,
                 "start_x": row["Start X"],
                 "start_y": row["Start Y"],
-                "end_x": end_x,
-                "end_y": end_y,
+                "end_x": row["End X"],
+                "end_y": row["End Y"],
+                "inferred_end_x": inf["end_x"] if inf else None,
+                "inferred_end_y": inf["end_y"] if inf else None,
+                "inferred_end_time": inf["end_time"] if inf else None,
                 "from_player": row["From"],
                 "to_player": row["To"],
                 "team": row["Team"],
