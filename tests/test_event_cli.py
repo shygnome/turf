@@ -41,9 +41,9 @@ def _make_events() -> pd.DataFrame:
             "Subtype": ["success", None, "fail", "success"],
             "Period": [1, 1, 1, 1],
             "Start Frame": [2, 5, 10, 20],
-            "Start Time [s]": [0.06, 0.15, 0.30, 0.60],
+            "Start Time [s]": [2.0, 5.0, 10.0, 20.0],
             "End Frame": [4, 9, 14, 24],
-            "End Time [s]": [0.12, 0.28, 0.44, 0.76],
+            "End Time [s]": [4.0, 9.0, 14.0, 24.0],
             "From": ["Alice", "Bob", "Charlie", "Alice"],
             "To": ["Bob", None, "Dave", "Charlie"],
             "Start X": [0.1, -5.0, 10.0, 3.0],
@@ -61,7 +61,7 @@ def _make_tracking(home: bool) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "Period": [1] * n,
-            "Time [s]": [i * 0.04 for i in range(n)],
+            "Time [s]": [float(i) for i in range(n)],
             f"{prefix}_1_x": [sign * float(i) for i in range(n)],
             f"{prefix}_1_y": [sign * float(i) * 0.5 for i in range(n)],
             "ball_x": [float(i) * 0.1 for i in range(n)],
@@ -240,7 +240,7 @@ def test_event_extract_frames_have_frame_column(extract_result: tuple) -> None:
 def test_event_extract_first_home_frames_row_count(extract_result: tuple) -> None:
     _, out_dir = extract_result
     df = pd.read_csv(out_dir / "frames_home_0.csv")
-    # event 0: start_frame=2, end_frame=4 → 3 rows
+    # event 0: time [2.0, 4.0] → tracking rows 2, 3, 4 = 3 rows
     assert len(df) == 3
 
 
@@ -328,7 +328,340 @@ def test_event_extract_dotdot_label_exits_nonzero(
     output_root = tmp_path / "output"
     monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
     monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    result = runner.invoke(app, ["event", "extract", "pff/fifa-wc-2022", "10502", ".."])
+    assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# turf event visualize — helpers
+# ---------------------------------------------------------------------------
+
+
+def _mock_visualizer(monkeypatch: pytest.MonkeyPatch) -> tuple[object, object, object]:
+    """Patch EventVisualizer so no matplotlib rendering happens.
+
+    Returns (mock_class, mock_fig, mock_anim).
+    """
+    from unittest.mock import MagicMock
+
+    mock_fig = MagicMock()
+    mock_anim = MagicMock()
+    mock_instance = MagicMock()
+    mock_instance.freeze_frame.return_value = mock_fig
+    mock_instance.animate.return_value = mock_anim
+    mock_cls = MagicMock(return_value=mock_instance)
+    monkeypatch.setattr("turf.event_visualizer.EventVisualizer", mock_cls)
+    return mock_cls, mock_fig, mock_anim
+
+
+@pytest.fixture()
+def visualize_result(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[object, Path]:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _mock_visualizer(monkeypatch)
     result = runner.invoke(
-        app, ["event", "extract", "pff/fifa-wc-2022", "10502", ".."]
+        app, ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass"]
+    )
+    out_dir = output_root / "pff" / "fifa-wc-2022" / "10502" / "pass"
+    return result, out_dir
+
+
+# ---------------------------------------------------------------------------
+# turf event visualize — happy path
+# ---------------------------------------------------------------------------
+
+
+def test_event_visualize_exit_code(visualize_result: tuple) -> None:
+    result, _ = visualize_result
+    assert result.exit_code == 0
+
+
+def test_event_visualize_creates_output_dir(visualize_result: tuple) -> None:
+    _, out_dir = visualize_result
+    assert out_dir.exists()
+
+
+def test_event_visualize_freeze_called_per_event(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    mock_cls, _, _ = _mock_visualizer(monkeypatch)
+    runner.invoke(app, ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass"])
+    # 3 pass events → freeze_frame called 3 times
+    assert mock_cls.return_value.freeze_frame.call_count == 3
+
+
+def test_event_visualize_animate_called_per_event(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    mock_cls, _, _ = _mock_visualizer(monkeypatch)
+    runner.invoke(app, ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass"])
+    assert mock_cls.return_value.animate.call_count == 3
+
+
+def test_event_visualize_savefig_called_per_event(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _, mock_fig, _ = _mock_visualizer(monkeypatch)
+    runner.invoke(app, ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass"])
+    assert mock_fig.savefig.call_count == 3
+
+
+def test_event_visualize_anim_save_called_per_event(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _, _, mock_anim = _mock_visualizer(monkeypatch)
+    runner.invoke(app, ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass"])
+    assert mock_anim.save.call_count == 3
+
+
+def test_event_visualize_shows_output_path(visualize_result: tuple) -> None:
+    result, out_dir = visualize_result
+    assert str(out_dir) in result.output
+
+
+def test_event_visualize_case_insensitive(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _mock_visualizer(monkeypatch)
+    result = runner.invoke(
+        app, ["event", "visualize", "pff/fifa-wc-2022", "10502", "PASS"]
+    )
+    assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# turf event visualize — --event-idx filter
+# ---------------------------------------------------------------------------
+
+
+def test_event_visualize_event_idx_filter(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    mock_cls, _, _ = _mock_visualizer(monkeypatch)
+    runner.invoke(
+        app,
+        ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass", "--event-idx", "0"],
+    )
+    # only 1 event → freeze_frame called once
+    assert mock_cls.return_value.freeze_frame.call_count == 1
+
+
+def test_event_visualize_event_idx_all_uses_all_events(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    mock_cls, _, _ = _mock_visualizer(monkeypatch)
+    runner.invoke(
+        app,
+        [
+            "event",
+            "visualize",
+            "pff/fifa-wc-2022",
+            "10502",
+            "pass",
+            "--event-idx",
+            "all",
+        ],
+    )
+    # fixture has 3 pass events → all 3 visualized
+    assert mock_cls.return_value.freeze_frame.call_count == 3
+
+
+def test_event_visualize_invalid_event_idx_str_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _mock_visualizer(monkeypatch)
+    result = runner.invoke(
+        app,
+        [
+            "event",
+            "visualize",
+            "pff/fifa-wc-2022",
+            "10502",
+            "pass",
+            "--event-idx",
+            "foo",
+        ],
+    )
+    assert result.exit_code != 0
+
+
+def test_event_visualize_invalid_event_idx_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _mock_visualizer(monkeypatch)
+    result = runner.invoke(
+        app,
+        [
+            "event",
+            "visualize",
+            "pff/fifa-wc-2022",
+            "10502",
+            "pass",
+            "--event-idx",
+            "99",
+        ],
+    )
+    assert result.exit_code != 0
+
+
+def test_event_visualize_default_caps_at_10(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import MagicMock
+
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    # Return 15 mock clips from the extractor
+    mock_clips = [MagicMock(event_idx=i) for i in range(15)]
+    mock_extractor_cls = MagicMock()
+    mock_extractor_cls.return_value.extract.return_value = mock_clips
+    monkeypatch.setattr("turf.event.EventExtractor", mock_extractor_cls)
+    mock_cls, _, _ = _mock_visualizer(monkeypatch)
+    runner.invoke(app, ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass"])
+    assert mock_cls.return_value.freeze_frame.call_count == 10
+
+
+# ---------------------------------------------------------------------------
+# turf event visualize — --smooth flag
+# ---------------------------------------------------------------------------
+
+
+def test_event_visualize_smooth_flag_passed_to_visualizer(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    mock_cls, _, _ = _mock_visualizer(monkeypatch)
+    runner.invoke(
+        app,
+        ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass", "--smooth"],
+    )
+    # verify smooth=True was forwarded to freeze_frame
+    call_kwargs = mock_cls.return_value.freeze_frame.call_args_list[0]
+    assert call_kwargs.kwargs.get("smooth") is True
+
+
+def test_event_visualize_no_smooth_by_default(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    mock_cls, _, _ = _mock_visualizer(monkeypatch)
+    runner.invoke(app, ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass"])
+    call_kwargs = mock_cls.return_value.freeze_frame.call_args_list[0]
+    assert call_kwargs.kwargs.get("smooth") is False
+
+
+# ---------------------------------------------------------------------------
+# turf event visualize — error cases
+# ---------------------------------------------------------------------------
+
+
+def test_event_visualize_unknown_dataset_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    result = runner.invoke(
+        app, ["event", "visualize", "unknown/dataset", "10502", "pass"]
+    )
+    assert result.exit_code != 0
+
+
+def test_event_visualize_unknown_match_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    result = runner.invoke(
+        app, ["event", "visualize", "pff/fifa-wc-2022", "99999", "pass"]
+    )
+    assert result.exit_code != 0
+
+
+def test_event_visualize_unknown_label_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _mock_visualizer(monkeypatch)
+    result = runner.invoke(
+        app, ["event", "visualize", "pff/fifa-wc-2022", "10502", "tackle"]
+    )
+    assert result.exit_code != 0
+
+
+def test_event_visualize_dotdot_label_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    result = runner.invoke(
+        app, ["event", "visualize", "pff/fifa-wc-2022", "10502", ".."]
+    )
+    assert result.exit_code != 0
+
+
+def test_event_visualize_zero_fps_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _mock_visualizer(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass", "--fps", "0"],
+    )
+    assert result.exit_code != 0
+
+
+def test_event_visualize_negative_fps_exits_nonzero(
+    preprocessed_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_root = tmp_path / "output"
+    monkeypatch.setattr("turf.event.get_root", lambda: preprocessed_root)
+    monkeypatch.setattr("turf.event.get_output_root", lambda: output_root)
+    _mock_visualizer(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["event", "visualize", "pff/fifa-wc-2022", "10502", "pass", "--fps", "-5"],
     )
     assert result.exit_code != 0

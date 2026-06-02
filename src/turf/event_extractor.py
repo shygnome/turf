@@ -19,6 +19,10 @@ class EventClip:
     away_frames: pd.DataFrame
 
 
+_TIME_COL = "Time [s]"
+_PERIOD_COL = "Period"
+
+
 class EventExtractor:
     def list_labels(self, events: pd.DataFrame) -> list[str]:
         return sorted(events["Type"].str.lower().dropna().unique().tolist())
@@ -28,12 +32,46 @@ class EventExtractor:
         matching = match_data.events[mask].reset_index(drop=True)
         clips: list[EventClip] = []
         for event_idx, (_, row) in enumerate(matching.iterrows()):
-            start = int(row["Start Frame"])
-            end = int(row["End Frame"])
+            start_time = float(row["Start Time [s]"])
+            end_time = float(row["End Time [s]"])
+            period = int(row[_PERIOD_COL])
+
+            # Filter to matching period so we don't snap across half-time boundary
+            home_period = match_data.home_tracking[
+                match_data.home_tracking[_PERIOD_COL] == period
+            ]
+            away_period = match_data.away_tracking[
+                match_data.away_tracking[_PERIOD_COL] == period
+            ]
+            if len(home_period) == 0 or len(away_period) == 0:
+                raise ValueError(
+                    f"No tracking frames found for event {event_idx} "
+                    f"in period {period}."
+                )
+
+            # Snap to the nearest tracking frame for start and end times
+            start_label = int((home_period[_TIME_COL] - start_time).abs().idxmin())
+            end_label = int((home_period[_TIME_COL] - end_time).abs().idxmin())
+            if end_label < start_label:
+                end_label = start_label
+
+            home_frames = home_period.loc[start_label:end_label].copy()
+            away_frames = away_period.loc[start_label:end_label].copy()
+
+            if len(home_frames) == 0 or len(away_frames) == 0:
+                raise ValueError(
+                    f"No tracking frames found for event {event_idx} "
+                    f"in time range [{start_time}, {end_time}]."
+                )
+
+            start = int(home_frames.index[0])
+            end = int(home_frames.index[-1])
             meta: dict[str, object] = {
                 "event_idx": event_idx,
                 "start_frame": start,
                 "end_frame": end,
+                "start_time": start_time,
+                "end_time": end_time,
                 "start_x": row["Start X"],
                 "start_y": row["Start Y"],
                 "end_x": row["End X"],
@@ -42,17 +80,8 @@ class EventExtractor:
                 "to_player": row["To"],
                 "team": row["Team"],
                 "subtype": row["Subtype"],
-                "period": int(row["Period"]),
+                "period": period,
             }
-            expected = end - start + 1
-            home_frames = match_data.home_tracking.iloc[start : end + 1].copy()
-            away_frames = match_data.away_tracking.iloc[start : end + 1].copy()
-            if len(home_frames) != expected or len(away_frames) != expected:
-                raise ValueError(
-                    f"Frame range [{start}, {end}] out of bounds "
-                    f"(home tracking: {len(match_data.home_tracking)} rows, "
-                    f"away tracking: {len(match_data.away_tracking)} rows)."
-                )
             clips.append(
                 EventClip(
                     event_idx=event_idx,
