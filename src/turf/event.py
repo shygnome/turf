@@ -52,6 +52,11 @@ def extract_cmd(
     label: str = typer.Argument(
         ..., help="Event type label to extract (case-insensitive)."
     ),  # noqa: E501
+    infer_endpoints: bool = typer.Option(
+        True,
+        "--infer-endpoints/--no-infer-endpoints",
+        help="Infer end position from the next event (pass and cross only).",
+    ),
 ) -> None:
     """Extract tracking frame clips for all occurrences of an event type."""
     label = label.strip().lower()
@@ -72,7 +77,7 @@ def extract_cmd(
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from None
 
-    clips = EventExtractor().extract(data, label)
+    clips = EventExtractor().extract(data, label, infer_endpoints=infer_endpoints)
     if not clips:
         typer.echo(f"No '{label}' events found in match {match_id}.", err=True)
         raise typer.Exit(1)
