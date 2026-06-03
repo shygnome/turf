@@ -105,6 +105,13 @@ class TestDetectLinesFrame:
         result = detect_lines_frame(positions)
         assert set(result.keys()) == set(positions.keys())
 
+    def test_fallback_preserves_min_lines_when_merge_would_collapse(self) -> None:
+        # 3 tightly packed + 1 outlier: Ward k=2 gives 3+1,
+        # naive merge would collapse to 1 line
+        positions = {"2": 1.0, "11": 1.1, "6": 1.2, "7": 10.0}
+        result = detect_lines_frame(positions)
+        assert len(set(result.values())) >= 2
+
 
 # ── analyze_lines ─────────────────────────────────────────────────────────────
 

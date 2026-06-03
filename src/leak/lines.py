@@ -127,11 +127,13 @@ def detect_lines_frame(
                 best_labels = labels.copy()
 
     if best_labels is None:
-        # Fallback: no clustering met all constraints; use smallest allowed k
-        # and merge any undersized groups afterward
+        # Fallback: no clustering met all constraints; use smallest allowed k.
+        # Only accept singleton merges that don't drop below min_lines.
         k = max(1, min(min_lines, max(1, n // min_per_line)))
         best_labels = _cluster(x, k)
-        best_labels = _merge_singletons(x, best_labels, min_per_line)
+        merged = _merge_singletons(x, best_labels, min_per_line)
+        if len(np.unique(merged)) >= min_lines:
+            best_labels = merged
 
     # Remap to 1-indexed labels ordered by mean x (1 = deepest)
     unique_clusters = np.unique(best_labels)
