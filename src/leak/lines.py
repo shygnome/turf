@@ -127,7 +127,8 @@ def detect_lines_frame(
                 best_labels = labels.copy()
 
     if best_labels is None:
-        # Fallback: cluster at minimum possible k and merge undersized groups
+        # Fallback: no clustering met all constraints; use smallest allowed k
+        # and merge any undersized groups afterward
         k = max(1, min(min_lines, max(1, n // min_per_line)))
         best_labels = _cluster(x, k)
         best_labels = _merge_singletons(x, best_labels, min_per_line)
@@ -159,12 +160,15 @@ def analyze_lines(df: pd.DataFrame, team: str) -> pd.DataFrame:
     ]
     player_nums = [c.rsplit("_x", 1)[0].rsplit("_", 1)[1] for c in x_cols]
 
-    result[f"{team}_{gk_num}_line"] = 0
+    result[f"{team}_{gk_num}_line"] = np.nan
     for num in player_nums:
         result[f"{team}_{num}_line"] = np.nan
     result["line_count"] = 0
 
     for idx, row in df.iterrows():
+        if pd.notna(row[gk_x_col]):
+            result.at[idx, f"{team}_{gk_num}_line"] = 0
+
         x_pos: dict[str, float] = {}
         for col, num in zip(x_cols, player_nums, strict=False):
             val = row[col]

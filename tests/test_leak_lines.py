@@ -154,3 +154,10 @@ class TestAnalyzeLines:
     def test_row_count_unchanged(self) -> None:
         df = _event_df()
         assert len(analyze_lines(df, "Away")) == len(df)
+
+    def test_absent_gk_gets_nan_line(self) -> None:
+        df = _event_df()
+        df.loc[2, "Away_3_x"] = np.nan
+        result = analyze_lines(df, "Away")
+        assert pd.isna(result.loc[2, "Away_3_line"])
+        assert result.loc[0, "Away_3_line"] == 0
