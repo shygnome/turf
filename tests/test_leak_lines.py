@@ -5,7 +5,12 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 
-from leak.lines import analyze_lines, detect_lines_frame, find_goalkeeper
+from leak.lines import (
+    analyze_lines,
+    detect_lines_frame,
+    find_goalkeeper,
+    smooth_line_assignments,
+)
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
@@ -112,6 +117,38 @@ class TestDetectLinesFrame:
         result = detect_lines_frame(positions)
         assert len(set(result.values())) >= 2
 
+    def test_min_line_gap_merges_close_adjacent_lines(self) -> None:
+        # 3 initial lines: [10,11], [12,13], [25,26]
+        # first two are only 2 m apart → should merge with gap=5.0
+        positions = {
+            "2": 10.0, "11": 11.0,
+            "6": 12.0, "7": 13.0,
+            "9": 25.0, "10": 26.0,
+        }
+        result = detect_lines_frame(positions, min_line_gap=5.0)
+        assert len(set(result.values())) == 2
+
+    def test_min_line_gap_keeps_well_separated_lines(self) -> None:
+        # 10 m gap between clusters — gap=5.0 should not merge them
+        positions = {"2": 5.0, "11": 6.0, "6": 16.0, "7": 17.0}
+        result = detect_lines_frame(positions, min_line_gap=5.0)
+        assert len(set(result.values())) == 2
+
+    def test_min_line_gap_stops_at_min_lines(self) -> None:
+        # Even with a huge threshold, we never go below min_lines
+        positions = {"2": 1.0, "11": 2.0, "6": 3.0, "7": 4.0}
+        result = detect_lines_frame(positions, min_line_gap=100.0, min_lines=2)
+        assert len(set(result.values())) >= 2
+
+    def test_min_line_gap_zero_is_no_op(self) -> None:
+        positions = {
+            "2": 10.0, "11": 11.0,
+            "6": 12.0, "7": 13.0,
+        }
+        assert detect_lines_frame(positions, min_line_gap=0.0) == detect_lines_frame(
+            positions
+        )
+
 
 # ── analyze_lines ─────────────────────────────────────────────────────────────
 
@@ -162,9 +199,82 @@ class TestAnalyzeLines:
         df = _event_df()
         assert len(analyze_lines(df, "Away")) == len(df)
 
+    def test_min_line_gap_propagated_to_frame_detection(self) -> None:
+        # 3 close lines in event data: [10,11], [12,13], [25,26]
+        # with gap=5.0 the first two merge → line_count should be 2
+        rows = []
+        for f in range(3):
+            row: dict[str, object] = {
+                "frame": f, "Period": 1, "Time [s]": f * 0.033
+            }
+            row["Away_3_x"] = 43.0
+            row["Away_3_y"] = 0.0
+            for pid, x, y in [
+                ("2", 10.0, 0.0), ("11", 11.0, 0.0),
+                ("6", 12.0, 0.0), ("7", 13.0, 0.0),
+                ("9", 25.0, 0.0), ("10", 26.0, 0.0),
+            ]:
+                row[f"Away_{pid}_x"] = float(x)
+                row[f"Away_{pid}_y"] = float(y)
+            rows.append(row)
+        df = pd.DataFrame(rows)
+        result = analyze_lines(df, "Away", min_line_gap=5.0)
+        assert (result["line_count"] == 2).all()
+
     def test_absent_gk_gets_nan_line(self) -> None:
         df = _event_df()
         df.loc[2, "Away_3_x"] = np.nan
         result = analyze_lines(df, "Away")
         assert pd.isna(result.loc[2, "Away_3_line"])
         assert result.loc[0, "Away_3_line"] == 0
+
+
+# ── smooth_line_assignments ───────────────────────────────────────────────────
+
+
+class TestSmoothLineAssignments:
+    def test_stable_assignments_unchanged(self) -> None:
+        df = _event_df()
+        lined = analyze_lines(df, "Away")
+        result = smooth_line_assignments(lined, "Away", window=3)
+        for pid in ["2", "6", "7", "9", "10", "11"]:
+            col = f"Away_{pid}_line"
+            assert result[col].tolist() == lined[col].tolist()
+
+    def test_single_frame_flicker_corrected(self) -> None:
+        df = _event_df()
+        lined = analyze_lines(df, "Away")
+        # Inject a one-frame flip on player 2 (usually line 1)
+        original_val = float(lined.at[2, "Away_2_line"])
+        flipped_val = 3.0 if original_val != 3.0 else 1.0
+        lined.at[2, "Away_2_line"] = flipped_val
+        result = smooth_line_assignments(lined, "Away", window=5)
+        # Middle frame should revert to majority (original) value
+        assert int(result.at[2, "Away_2_line"]) == int(original_val)
+
+    def test_all_nan_stays_nan(self) -> None:
+        df = _event_df()
+        lined = analyze_lines(df, "Away")
+        lined["Away_14_line"] = np.nan
+        result = smooth_line_assignments(lined, "Away")
+        assert result["Away_14_line"].isna().all()
+
+    def test_non_line_columns_unchanged(self) -> None:
+        df = _event_df()
+        lined = analyze_lines(df, "Away")
+        original_x = lined["Away_2_x"].tolist()
+        result = smooth_line_assignments(lined, "Away")
+        assert result["Away_2_x"].tolist() == original_x
+
+    def test_returns_copy_not_mutation(self) -> None:
+        df = _event_df()
+        lined = analyze_lines(df, "Away")
+        original = lined["Away_2_line"].tolist()
+        smooth_line_assignments(lined, "Away")
+        assert lined["Away_2_line"].tolist() == original
+
+    def test_gk_line_zero_preserved(self) -> None:
+        df = _event_df()
+        lined = analyze_lines(df, "Away")
+        result = smooth_line_assignments(lined, "Away")
+        assert (result["Away_3_line"].dropna() == 0).all()

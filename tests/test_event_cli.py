@@ -225,37 +225,37 @@ def test_event_extract_metadata_columns(extract_result: tuple) -> None:
 def test_event_extract_creates_home_frame_csvs(extract_result: tuple) -> None:
     _, out_dir = extract_result
     for i in range(3):
-        assert (out_dir / f"frames_home_{i}.csv").exists()
+        assert (out_dir / str(i) / "frames_home.csv").exists()
 
 
 def test_event_extract_creates_away_frame_csvs(extract_result: tuple) -> None:
     _, out_dir = extract_result
     for i in range(3):
-        assert (out_dir / f"frames_away_{i}.csv").exists()
+        assert (out_dir / str(i) / "frames_away.csv").exists()
 
 
 def test_event_extract_frames_have_frame_column(extract_result: tuple) -> None:
     _, out_dir = extract_result
-    df = pd.read_csv(out_dir / "frames_home_0.csv")
+    df = pd.read_csv(out_dir / "0" / "frames_home.csv")
     assert "frame" in df.columns
 
 
 def test_event_extract_first_home_frames_row_count(extract_result: tuple) -> None:
     _, out_dir = extract_result
-    df = pd.read_csv(out_dir / "frames_home_0.csv")
+    df = pd.read_csv(out_dir / "0" / "frames_home.csv")
     # event 0: inferred end = next event (other) at t=5.0 → rows 2,3,4,5 = 4
     assert len(df) == 4
 
 
 def test_event_extract_first_away_frames_row_count(extract_result: tuple) -> None:
     _, out_dir = extract_result
-    df = pd.read_csv(out_dir / "frames_away_0.csv")
+    df = pd.read_csv(out_dir / "0" / "frames_away.csv")
     assert len(df) == 4
 
 
 def test_event_extract_frame_column_values(extract_result: tuple) -> None:
     _, out_dir = extract_result
-    df = pd.read_csv(out_dir / "frames_home_0.csv")
+    df = pd.read_csv(out_dir / "0" / "frames_home.csv")
     # event 0: inferred end t=5.0 → frame column [2, 3, 4, 5]
     assert df["frame"].tolist() == [2, 3, 4, 5]
 
@@ -283,7 +283,7 @@ def test_event_extract_no_infer_endpoints_flag(
         ],
     )
     out_dir = output_root / "pff" / "fifa-wc-2022" / "10502" / "pass"
-    df = pd.read_csv(out_dir / "frames_home_0.csv")
+    df = pd.read_csv(out_dir / "0" / "frames_home.csv")
     # without inference, event 0 uses raw end t=4.0 → rows 2,3,4 = 3
     assert df["frame"].tolist() == [2, 3, 4]
 

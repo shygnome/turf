@@ -96,12 +96,14 @@ def extract_cmd(
     )
 
     for clip in clips:
+        event_dir = out_dir / str(clip.event_idx)
+        event_dir.mkdir(exist_ok=True)
         home_df = clip.home_frames.copy()
         home_df.insert(0, "frame", list(clip.home_frames.index))
         away_df = clip.away_frames.copy()
         away_df.insert(0, "frame", list(clip.away_frames.index))
-        home_df.to_csv(out_dir / f"frames_home_{clip.event_idx}.csv", index=False)
-        away_df.to_csv(out_dir / f"frames_away_{clip.event_idx}.csv", index=False)
+        home_df.to_csv(event_dir / "frames_home.csv", index=False)
+        away_df.to_csv(event_dir / "frames_away.csv", index=False)
 
     typer.echo(f"Extracted {len(clips)} '{label}' event(s) to {out_dir}")
 
@@ -185,8 +187,10 @@ def visualize_cmd(
 
     viz = EventVisualizer()
     for clip in tqdm(clips, desc="visualizing", unit="event"):
-        freeze_path = out_dir / f"freeze_{clip.event_idx}.png"
-        clip_path = out_dir / f"clip_{clip.event_idx}.gif"
+        event_dir = out_dir / str(clip.event_idx)
+        event_dir.mkdir(exist_ok=True)
+        freeze_path = event_dir / "freeze.png"
+        clip_path = event_dir / "clip.gif"
 
         fig = viz.freeze_frame(clip, label, smooth=smooth)
         fig.savefig(freeze_path, dpi=150, bbox_inches="tight")
