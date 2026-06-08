@@ -278,3 +278,12 @@ class TestSmoothLineAssignments:
         lined = analyze_lines(df, "Away")
         result = smooth_line_assignments(lined, "Away")
         assert (result["Away_3_line"].dropna() == 0).all()
+
+    def test_nan_positions_not_filled_by_smoothing(self) -> None:
+        df = _event_df()
+        lined = analyze_lines(df, "Away")
+        # Inject NaN for player 2 at frame 2 (simulating mid-clip absence)
+        lined.at[2, "Away_2_line"] = float("nan")
+        result = smooth_line_assignments(lined, "Away", window=5)
+        # Smoothing must not invent a value where the original was NaN
+        assert pd.isna(result.at[2, "Away_2_line"])

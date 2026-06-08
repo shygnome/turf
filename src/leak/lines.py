@@ -188,9 +188,11 @@ def smooth_line_assignments(
         series: pd.Series = df[col]
         if series.isna().all():
             continue
-        result[col] = series.rolling(window, center=True, min_periods=1).apply(
+        smoothed = series.rolling(window, center=True, min_periods=1).apply(
             _mode, raw=True
         )
+        # Preserve original NaN positions — smoothing must not invent values
+        result[col] = smoothed.where(series.notna())
     return result
 
 

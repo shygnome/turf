@@ -27,6 +27,10 @@ def extract_line(
     ),
 ) -> None:
     """Detect unit lines for the defending team in every extracted pass clip."""
+    if min_line_gap < 0:
+        typer.echo("--min-line-gap must be a non-negative number.", err=True)
+        raise typer.Exit(1)
+
     import pandas as pd  # type: ignore[import-untyped]
 
     from leak.lines import analyze_lines
@@ -95,6 +99,9 @@ def visualize_line(
     fps: float = typer.Option(25.0, "--fps", help="Frames per second for animation."),
     smooth_lines: bool = typer.Option(
         True, "--smooth-lines/--no-smooth-lines", help="Smooth line assignments."
+    ),
+    debug: bool = typer.Option(
+        False, "--debug/--no-debug", help="Overlay inter-line gap labels."
     ),
 ) -> None:
     """Visualize defending team unit lines as animated GIF clips."""
@@ -174,7 +181,7 @@ def visualize_line(
             "team": attacking_team,
         }
 
-        n_frames = len(def_df)
+        n_frames = min(len(def_df), len(atk_df))
         gif_path = event_dir / "linevis.gif"
 
         anim = viz.animate(
@@ -185,7 +192,7 @@ def visualize_line(
             meta_dict,
             fps=fps,
             smooth_lines=smooth_lines,
-            debug=True, #TODO: turn off debug for final version
+            debug=debug,
         )
         with tqdm(
             total=n_frames,

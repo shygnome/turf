@@ -483,6 +483,25 @@ def test_visualize_line_zero_fps_exits_nonzero(
     assert result.exit_code != 0
 
 
+def test_extract_line_negative_min_line_gap_exits_nonzero(
+    pass_output_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("turf.analyze_leak.get_output_root", lambda: pass_output_dir)
+    result = runner.invoke(
+        app,
+        [
+            "analyze",
+            "leak",
+            "extract-line",
+            DATASET_ID,
+            MATCH_ID,
+            "--min-line-gap",
+            "-1.0",
+        ],
+    )
+    assert result.exit_code != 0
+
+
 def test_extract_line_min_line_gap_flag_accepted(
     pass_output_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -500,6 +519,36 @@ def test_extract_line_min_line_gap_flag_accepted(
         ],
     )
     assert result.exit_code == 0
+
+
+def test_visualize_line_debug_flag_forwarded(
+    pass_output_dir_with_lines: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "turf.analyze_leak.get_output_root", lambda: pass_output_dir_with_lines
+    )
+    mock_cls, _ = _mock_leak_visualizer(monkeypatch)
+    runner.invoke(
+        app,
+        ["analyze", "leak", "visualize-line", DATASET_ID, MATCH_ID, "--debug"],
+    )
+    for call in mock_cls.return_value.animate.call_args_list:
+        assert call.kwargs.get("debug") is True
+
+
+def test_visualize_line_debug_off_by_default(
+    pass_output_dir_with_lines: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "turf.analyze_leak.get_output_root", lambda: pass_output_dir_with_lines
+    )
+    mock_cls, _ = _mock_leak_visualizer(monkeypatch)
+    runner.invoke(
+        app,
+        ["analyze", "leak", "visualize-line", DATASET_ID, MATCH_ID],
+    )
+    for call in mock_cls.return_value.animate.call_args_list:
+        assert call.kwargs.get("debug") is False
 
 
 def test_visualize_line_no_smooth_lines_passes_false(
