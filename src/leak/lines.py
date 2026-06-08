@@ -85,6 +85,7 @@ def detect_lines_frame(
     min_per_line: int = 2,
     min_lines: int = 2,
     max_lines: int = 4,
+    min_line_gap: float = 0.0,
 ) -> dict[str, int]:
     """
     Detect defensive unit lines for outfield players in a single frame.
@@ -135,16 +136,69 @@ def detect_lines_frame(
         if len(np.unique(merged)) >= min_lines:
             best_labels = merged
 
+    # Merge adjacent lines that are too close together
+    assert best_labels is not None
+    if min_line_gap > 0.0:
+        changed = True
+        while changed:
+            changed = False
+            uc = np.unique(best_labels)
+            if len(uc) <= min_lines:
+                break
+            means = {int(c): float(x[best_labels == c].mean()) for c in uc}
+            sorted_c = sorted(uc, key=lambda c: means[int(c)])
+            for i in range(len(sorted_c) - 1):
+                c1, c2 = int(sorted_c[i]), int(sorted_c[i + 1])
+                if means[c2] - means[c1] < min_line_gap:
+                    s1 = int((best_labels == c1).sum())
+                    s2 = int((best_labels == c2).sum())
+                    keep, drop = (c1, c2) if s1 >= s2 else (c2, c1)
+                    best_labels = best_labels.copy()
+                    best_labels[best_labels == drop] = keep
+                    changed = True
+                    break
+
     # Remap to 1-indexed labels ordered by mean x (1 = deepest)
     unique_clusters = np.unique(best_labels)
-    assert best_labels is not None
     ordered = sorted(unique_clusters, key=lambda c: float(x[best_labels == c].mean()))
     remap = {int(old): new + 1 for new, old in enumerate(ordered)}
 
     return {p: remap[int(best_labels[i])] for i, p in enumerate(players)}
 
 
-def analyze_lines(df: pd.DataFrame, team: str) -> pd.DataFrame:
+def smooth_line_assignments(
+    df: pd.DataFrame, team: str, window: int = 5
+) -> pd.DataFrame:
+    """Apply rolling majority-vote to line assignments to reduce flicker."""
+    result = df.copy()
+    line_cols = [
+        c
+        for c in df.columns
+        if c.startswith(team + "_") and c.endswith("_line")
+    ]
+
+    def _mode(arr: npt.NDArray[np.float64]) -> float:
+        valid = arr[~np.isnan(arr)]
+        if len(valid) == 0:
+            return float("nan")
+        counts = np.bincount(valid.astype(np.intp))
+        return float(np.argmax(counts))
+
+    for col in line_cols:
+        series: pd.Series = df[col]
+        if series.isna().all():
+            continue
+        smoothed = series.rolling(window, center=True, min_periods=1).apply(
+            _mode, raw=True
+        )
+        # Preserve original NaN positions — smoothing must not invent values
+        result[col] = smoothed.where(series.notna())
+    return result
+
+
+def analyze_lines(
+    df: pd.DataFrame, team: str, min_line_gap: float = 0.0
+) -> pd.DataFrame:
     """
     Add unit line assignments to every frame in df.
 
@@ -177,7 +231,7 @@ def analyze_lines(df: pd.DataFrame, team: str) -> pd.DataFrame:
             if pd.notna(val):
                 x_pos[num] = float(val)
 
-        lines = detect_lines_frame(x_pos)
+        lines = detect_lines_frame(x_pos, min_line_gap=min_line_gap)
         for num, line_num in lines.items():
             result.at[idx, f"{team}_{num}_line"] = float(line_num)
         result.at[idx, "line_count"] = len(set(lines.values())) if lines else 0
