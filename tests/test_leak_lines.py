@@ -69,9 +69,12 @@ class TestDetectLinesFrame:
 
     def test_three_clear_groups_assigns_correct_lines(self) -> None:
         positions = {
-            "2": 8.0, "11": 9.0,
-            "6": 18.0, "7": 19.0,
-            "9": 27.0, "10": 28.0,
+            "2": 8.0,
+            "11": 9.0,
+            "6": 18.0,
+            "7": 19.0,
+            "9": 27.0,
+            "10": 28.0,
         }
         result = detect_lines_frame(positions)
         assert result["2"] == result["11"] == 1
@@ -80,8 +83,10 @@ class TestDetectLinesFrame:
 
     def test_lines_ordered_deepest_first(self) -> None:
         positions = {
-            "2": 28.0, "11": 29.0,
-            "6": 10.0, "7": 11.0,
+            "2": 28.0,
+            "11": 29.0,
+            "6": 10.0,
+            "7": 11.0,
         }
         result = detect_lines_frame(positions)
         assert result["6"] < result["2"]
@@ -96,10 +101,14 @@ class TestDetectLinesFrame:
 
     def test_singleton_merged_all_lines_min_two_players(self) -> None:
         positions = {
-            "2": 8.0, "11": 9.0,
-            "6": 18.0, "7": 19.0, "8": 19.5,
+            "2": 8.0,
+            "11": 9.0,
+            "6": 18.0,
+            "7": 19.0,
+            "8": 19.5,
             "5": 22.5,  # isolated between groups
-            "9": 30.0, "10": 31.0,
+            "9": 30.0,
+            "10": 31.0,
         }
         result = detect_lines_frame(positions)
         counts = Counter(result.values())
@@ -121,9 +130,12 @@ class TestDetectLinesFrame:
         # 3 initial lines: [10,11], [12,13], [25,26]
         # first two are only 2 m apart → should merge with gap=5.0
         positions = {
-            "2": 10.0, "11": 11.0,
-            "6": 12.0, "7": 13.0,
-            "9": 25.0, "10": 26.0,
+            "2": 10.0,
+            "11": 11.0,
+            "6": 12.0,
+            "7": 13.0,
+            "9": 25.0,
+            "10": 26.0,
         }
         result = detect_lines_frame(positions, min_line_gap=5.0)
         assert len(set(result.values())) == 2
@@ -142,8 +154,10 @@ class TestDetectLinesFrame:
 
     def test_min_line_gap_zero_is_no_op(self) -> None:
         positions = {
-            "2": 10.0, "11": 11.0,
-            "6": 12.0, "7": 13.0,
+            "2": 10.0,
+            "11": 11.0,
+            "6": 12.0,
+            "7": 13.0,
         }
         assert detect_lines_frame(positions, min_line_gap=0.0) == detect_lines_frame(
             positions
@@ -204,15 +218,16 @@ class TestAnalyzeLines:
         # with gap=5.0 the first two merge → line_count should be 2
         rows = []
         for f in range(3):
-            row: dict[str, object] = {
-                "frame": f, "Period": 1, "Time [s]": f * 0.033
-            }
+            row: dict[str, object] = {"frame": f, "Period": 1, "Time [s]": f * 0.033}
             row["Away_3_x"] = 43.0
             row["Away_3_y"] = 0.0
             for pid, x, y in [
-                ("2", 10.0, 0.0), ("11", 11.0, 0.0),
-                ("6", 12.0, 0.0), ("7", 13.0, 0.0),
-                ("9", 25.0, 0.0), ("10", 26.0, 0.0),
+                ("2", 10.0, 0.0),
+                ("11", 11.0, 0.0),
+                ("6", 12.0, 0.0),
+                ("7", 13.0, 0.0),
+                ("9", 25.0, 0.0),
+                ("10", 26.0, 0.0),
             ]:
                 row[f"Away_{pid}_x"] = float(x)
                 row[f"Away_{pid}_y"] = float(y)

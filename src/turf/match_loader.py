@@ -7,6 +7,36 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd  # type: ignore[import-untyped]
 
+# Standard kickoff time in seconds for each period.
+# Period 1 is always 0 and never adjusted.
+# PFF tracking data continues time across period boundaries rather than resetting,
+# so periods 2-4 need to be shifted back to their standard kickoff times.
+_PERIOD_KICKOFF_SECONDS: dict[int, float] = {
+    2: 2700.0,
+    3: 5400.0,
+    4: 8100.0,
+}
+
+
+def normalize_period_times(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize tracking 'Time [s]' so each period starts at its standard kickoff time.
+
+    PFF tracking data continues time from the end of the previous period instead of
+    resetting. This shifts Period 2 to start at 2700s, Period 3 at 5400s,
+    Period 4 at 8100s. Period 1 and any period beyond 4 are left unchanged.
+    """
+    result = df.copy()
+    for period_int, expected in _PERIOD_KICKOFF_SECONDS.items():
+        mask = result["Period"] == period_int
+        if not mask.any():
+            continue
+        actual_start = float(result.loc[mask, "Time [s]"].iloc[0])
+        offset = actual_start - expected
+        if offset:
+            result.loc[mask, "Time [s]"] = result.loc[mask, "Time [s]"] - offset
+    return result
+
 
 @dataclass
 class MatchData:
@@ -45,6 +75,6 @@ class MatchLoader:
         return MatchData(
             match_id=match_id,
             events=pd.read_csv(event_file),
-            home_tracking=pd.read_csv(home_file),
-            away_tracking=pd.read_csv(away_file),
+            home_tracking=normalize_period_times(pd.read_csv(home_file)),
+            away_tracking=normalize_period_times(pd.read_csv(away_file)),
         )

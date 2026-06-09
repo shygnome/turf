@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from turf.cli import app
-from turf.match_loader import MatchData, MatchLoader
+from turf.match_loader import MatchData, MatchLoader, normalize_period_times
 
 runner = CliRunner()
 
@@ -501,3 +501,112 @@ def test_cli_match_load_error_message_contains_dataset_id(
     monkeypatch.setattr("turf.match.get_root", lambda: tmp_path)
     result = runner.invoke(app, ["match", "load", "pff/fifa-wc-2022", "10502"])
     assert "pff/fifa-wc-2022" in result.output
+
+
+# ---------------------------------------------------------------------------
+# normalize_period_times
+# ---------------------------------------------------------------------------
+
+
+def _tracking(periods: list[int], times: list[float]) -> pd.DataFrame:
+    return pd.DataFrame({"Period": periods, "Time [s]": times})
+
+
+class TestNormalizePeriodTimes:
+    def test_period1_only_unchanged(self) -> None:
+        df = _tracking([1, 1, 1], [0.0, 1.0, 2.0])
+        result = normalize_period_times(df)
+        assert result["Time [s]"].tolist() == [0.0, 1.0, 2.0]
+
+    def test_period2_with_extra_time_adjusted_to_2700(self) -> None:
+        # Period 1 ran to 2820s (2 mins extra), period 2 continues from there
+        df = _tracking(
+            [1, 1, 2, 2],
+            [2695.0, 2820.0, 2820.04, 2821.04],
+        )
+        result = normalize_period_times(df)
+        p2 = result.loc[result["Period"] == 2, "Time [s]"]
+        assert p2.iloc[0] == pytest.approx(2700.0)
+        assert p2.iloc[1] == pytest.approx(2701.0)
+
+    def test_period1_times_untouched_when_period2_adjusted(self) -> None:
+        df = _tracking([1, 1, 2], [0.0, 2820.0, 2820.04])
+        result = normalize_period_times(df)
+        p1 = result.loc[result["Period"] == 1, "Time [s]"]
+        assert p1.tolist() == pytest.approx([0.0, 2820.0])
+
+    def test_period2_already_at_2700_is_noop(self) -> None:
+        df = _tracking([1, 2, 2], [0.0, 2700.0, 2701.0])
+        result = normalize_period_times(df)
+        assert result["Time [s]"].tolist() == pytest.approx([0.0, 2700.0, 2701.0])
+
+    def test_period3_adjusted_to_5400(self) -> None:
+        # Period 3 (OT) starts at 5520s instead of 5400s
+        df = _tracking([1, 2, 3], [0.0, 2700.0, 5520.0])
+        result = normalize_period_times(df)
+        assert result.loc[result["Period"] == 3, "Time [s]"].iloc[0] == pytest.approx(
+            5400.0
+        )
+
+    def test_period4_adjusted_to_8100(self) -> None:
+        df = _tracking([1, 2, 3, 4], [0.0, 2700.0, 5400.0, 8220.0])
+        result = normalize_period_times(df)
+        assert result.loc[result["Period"] == 4, "Time [s]"].iloc[0] == pytest.approx(
+            8100.0
+        )
+
+    def test_unknown_period_beyond_4_left_unchanged(self) -> None:
+        df = _tracking([1, 5], [0.0, 9999.0])
+        result = normalize_period_times(df)
+        assert result.loc[result["Period"] == 5, "Time [s]"].iloc[0] == pytest.approx(
+            9999.0
+        )
+
+    def test_original_dataframe_not_mutated(self) -> None:
+        df = _tracking([1, 2], [0.0, 2820.0])
+        original_p2_time = df.loc[df["Period"] == 2, "Time [s]"].iloc[0]
+        normalize_period_times(df)
+        assert df.loc[df["Period"] == 2, "Time [s]"].iloc[0] == original_p2_time
+
+
+# ---------------------------------------------------------------------------
+# MatchLoader.load — normalize_period_times applied
+# ---------------------------------------------------------------------------
+
+
+def _write_tracking_with_extra_time(base: Path, match_id: int) -> None:
+    """Write tracking CSV where Period 2 continues from end of Period 1 + extra time."""
+    for team in ("home", "away"):
+        d = base / f"{team}_tracking"
+        d.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(
+            {
+                "Period": [1, 1, 2, 2],
+                "Time [s]": [2695.0, 2820.0, 2820.04, 2821.04],
+                f"{team.capitalize()}_1_x": [0.0, 1.0, 2.0, 3.0],
+                f"{team.capitalize()}_1_y": [0.0, 0.0, 0.0, 0.0],
+                "ball_x": [0.0, 0.0, 0.0, 0.0],
+                "ball_y": [0.0, 0.0, 0.0, 0.0],
+            }
+        ).to_csv(d / f"{team}_tracking_{match_id}.csv", index=False)
+
+
+def test_load_normalizes_period2_tracking_times(
+    preprocessed_root: Path,
+) -> None:
+    base = preprocessed_root / "preprocessed" / "pff" / "fifa-wc-2022"
+    _write_tracking_with_extra_time(base, match_id=9500)
+
+    loader = MatchLoader(dataset_id="pff/fifa-wc-2022", root=preprocessed_root)
+    data = loader.load("9500")
+
+    p2_home = data.home_tracking.loc[
+        data.home_tracking["Period"] == 2, "Time [s]"
+    ]
+    assert p2_home.iloc[0] == pytest.approx(2700.0)
+    assert p2_home.iloc[1] == pytest.approx(2701.0)
+
+    p2_away = data.away_tracking.loc[
+        data.away_tracking["Period"] == 2, "Time [s]"
+    ]
+    assert p2_away.iloc[0] == pytest.approx(2700.0)

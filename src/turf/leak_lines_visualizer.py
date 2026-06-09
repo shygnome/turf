@@ -55,9 +55,7 @@ class LeakLinesVisualizer:
     ) -> FuncAnimation:
         """Return a FuncAnimation stepping through every tracking frame."""
         if smooth_lines:
-            defending_frames = smooth_line_assignments(
-                defending_frames, defending_team
-            )
+            defending_frames = smooth_line_assignments(defending_frames, defending_team)
 
         # Defending GK x — determines which direction is "deep"
         first_def_row = defending_frames.iloc[0]
@@ -87,9 +85,7 @@ class LeakLinesVisualizer:
         ]
 
         # Starting ball position and which unit line it is already behind
-        start_ball: tuple[float, float] | None = (
-            ball_trail[0] if ball_trail else None
-        )
+        start_ball: tuple[float, float] | None = ball_trail[0] if ball_trail else None
         start_label = ""
         if start_ball is not None:
             lp0 = self._players_by_line(defending_frames.iloc[0], defending_team)
@@ -220,31 +216,49 @@ class LeakLinesVisualizer:
         # ── legend ───────────────────────────────────────────────────────────
         legend_handles = [
             Line2D(
-                [], [],
-                color=def_color, marker="o", markersize=7, linewidth=0,
+                [],
+                [],
+                color=def_color,
+                marker="o",
+                markersize=7,
+                linewidth=0,
                 label=f"{defending_team} (def.)",
             ),
             Line2D(
-                [], [],
-                color=def_color, marker="D", markersize=7, linewidth=0,
-                markeredgecolor=_GK_EDGE_COLOR, markeredgewidth=1.5,
+                [],
+                [],
+                color=def_color,
+                marker="D",
+                markersize=7,
+                linewidth=0,
+                markeredgecolor=_GK_EDGE_COLOR,
+                markeredgewidth=1.5,
                 label=f"{defending_team} GK",
             ),
             Line2D(
-                [], [],
-                color=atk_color, marker="o", markersize=7, linewidth=0,
-                alpha=0.5, label=f"{attacking_team} (atk.)",
+                [],
+                [],
+                color=atk_color,
+                marker="o",
+                markersize=7,
+                linewidth=0,
+                alpha=0.5,
+                label=f"{attacking_team} (atk.)",
             ),
             Line2D(
-                [], [],
-                color=atk_color, marker="D", markersize=7, linewidth=0,
-                markeredgecolor=_GK_EDGE_COLOR, markeredgewidth=1.5,
-                alpha=0.5, label=f"{attacking_team} GK",
+                [],
+                [],
+                color=atk_color,
+                marker="D",
+                markersize=7,
+                linewidth=0,
+                markeredgecolor=_GK_EDGE_COLOR,
+                markeredgewidth=1.5,
+                alpha=0.5,
+                label=f"{attacking_team} GK",
             ),
         ]
-        ax.legend(
-            handles=legend_handles, loc="upper right", fontsize=7, framealpha=0.7
-        )
+        ax.legend(handles=legend_handles, loc="upper right", fontsize=7, framealpha=0.7)
 
         title = ax.set_title("")
         period = metadata.get("period", 1)
@@ -258,9 +272,7 @@ class LeakLinesVisualizer:
             atk_out = [(x, y) for pid, x, y in atk_all if pid != atk_gk_id]
             atk_gk = [(x, y) for pid, x, y in atk_all if pid == atk_gk_id]
 
-            atk_outfield_scat.set_offsets(
-                atk_out if atk_out else np.empty((0, 2))
-            )
+            atk_outfield_scat.set_offsets(atk_out if atk_out else np.empty((0, 2)))
             atk_gk_scat.set_offsets(atk_gk if atk_gk else np.empty((0, 2)))
 
             # Live ball
@@ -293,14 +305,10 @@ class LeakLinesVisualizer:
             line_players = self._players_by_line(row_def, defending_team)
 
             gk_players = line_players.get(0, [])
-            def_gk_scat.set_offsets(
-                gk_players if gk_players else np.empty((0, 2))
-            )
+            def_gk_scat.set_offsets(gk_players if gk_players else np.empty((0, 2)))
 
             all_outfield = [
-                p
-                for ln in range(1, _MAX_LINES + 1)
-                for p in line_players.get(ln, [])
+                p for ln in range(1, _MAX_LINES + 1) for p in line_players.get(ln, [])
             ]
             def_outfield_scat.set_offsets(
                 all_outfield if all_outfield else np.empty((0, 2))
@@ -408,9 +416,7 @@ class LeakLinesVisualizer:
         return best_id
 
     @staticmethod
-    def _ball_line_label(
-        ball_x: float, line_repr_xs: dict[int, float]
-    ) -> str:
+    def _ball_line_label(ball_x: float, line_repr_xs: dict[int, float]) -> str:
         """Return 'L{n}' for the deepest line beaten (L1=most dangerous/deepest).
 
         Ranks lines by abs(repr_x) descending: highest abs = closest to GK = L1.
@@ -454,9 +460,7 @@ class LeakLinesVisualizer:
             n += 1
         return players
 
-    def _player_ids_by_line(
-        self, row: pd.Series, team: str
-    ) -> dict[int, list[str]]:
+    def _player_ids_by_line(self, row: pd.Series, team: str) -> dict[int, list[str]]:
         result: dict[int, list[str]] = {}
         n = 1
         while True:
@@ -466,9 +470,7 @@ class LeakLinesVisualizer:
             line_col = f"{team}_{n}_line"
             try:
                 x = float(row[xc])
-                ln_raw = (
-                    float(row[line_col]) if line_col in row.index else float("nan")
-                )
+                ln_raw = float(row[line_col]) if line_col in row.index else float("nan")
             except (TypeError, ValueError):
                 n += 1
                 continue
@@ -527,9 +529,7 @@ class LeakLinesVisualizer:
             try:
                 x = float(row[xc])
                 y = float(row[yc])
-                ln_raw = (
-                    float(row[line_col]) if line_col in row.index else float("nan")
-                )
+                ln_raw = float(row[line_col]) if line_col in row.index else float("nan")
             except (TypeError, ValueError):
                 n += 1
                 continue
