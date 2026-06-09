@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from turf.pass_label import (
+from leak.pass_label import (
     assign_zone,
     compute_conceptual_line_xs,
     compute_pass_stats,

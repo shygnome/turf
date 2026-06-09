@@ -108,7 +108,7 @@ def label_pass(
         )
         raise typer.Exit(1)
 
-    from turf.pass_label import label_all_passes
+    from leak.pass_label import label_all_passes
 
     labeled = label_all_passes(output_root, dataset_id, match_id)
     n_labeled = int(labeled["is_line_breaking"].notna().sum())
@@ -148,7 +148,7 @@ def stats_pass(
 
     import pandas as pd  # noqa: PLC0415
 
-    from turf.pass_label import compute_pass_stats
+    from leak.pass_label import compute_pass_stats
 
     df = pd.read_csv(labeled_path)
     s = compute_pass_stats(df)
