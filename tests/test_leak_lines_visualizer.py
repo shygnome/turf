@@ -256,9 +256,7 @@ class TestSmoothLinesParam:
     def test_smooth_lines_true_calls_smooth_line_assignments(self) -> None:
         from unittest.mock import patch
 
-        with patch(
-            "turf.leak_lines_visualizer.smooth_line_assignments"
-        ) as mock_smooth:
+        with patch("turf.leak_lines_visualizer.smooth_line_assignments") as mock_smooth:
             mock_smooth.side_effect = lambda df, team, **kw: df
             LeakLinesVisualizer().animate(
                 _make_defending_frames(),
@@ -274,9 +272,7 @@ class TestSmoothLinesParam:
     def test_smooth_lines_false_skips_smooth_line_assignments(self) -> None:
         from unittest.mock import patch
 
-        with patch(
-            "turf.leak_lines_visualizer.smooth_line_assignments"
-        ) as mock_smooth:
+        with patch("turf.leak_lines_visualizer.smooth_line_assignments") as mock_smooth:
             mock_smooth.side_effect = lambda df, team, **kw: df
             LeakLinesVisualizer().animate(
                 _make_defending_frames(),
@@ -385,9 +381,7 @@ class TestAnimate:
             fig, real_ax = plt.subplots()
             mock_pitch_instance.draw.return_value = (fig, real_ax)
 
-            LeakLinesVisualizer().animate(
-                def_frames, atk_frames, "Away", "Home", _META
-            )
+            LeakLinesVisualizer().animate(def_frames, atk_frames, "Away", "Home", _META)
             update_fn = captured_update[0]
             update_fn(0)  # type: ignore[operator]  # should not raise
             plt.close(fig)
@@ -459,15 +453,11 @@ class TestAnimate:
 
 class TestFindPlayerGk:
     def test_returns_id_of_max_abs_x_positive(self) -> None:
-        row = pd.Series(
-            {"Away_1_x": 10.0, "Away_2_x": 43.0, "Away_3_x": 5.0}
-        )
+        row = pd.Series({"Away_1_x": 10.0, "Away_2_x": 43.0, "Away_3_x": 5.0})
         assert LeakLinesVisualizer()._find_player_gk(row, "Away") == "2"
 
     def test_returns_id_of_max_abs_x_negative(self) -> None:
-        row = pd.Series(
-            {"Home_1_x": -10.0, "Home_2_x": -43.0, "Home_3_x": -5.0}
-        )
+        row = pd.Series({"Home_1_x": -10.0, "Home_2_x": -43.0, "Home_3_x": -5.0})
         assert LeakLinesVisualizer()._find_player_gk(row, "Home") == "2"
 
     def test_returns_none_when_no_columns(self) -> None:
@@ -475,9 +465,7 @@ class TestFindPlayerGk:
         assert LeakLinesVisualizer()._find_player_gk(row, "Away") is None
 
     def test_nan_x_excluded(self) -> None:
-        row = pd.Series(
-            {"Away_1_x": float("nan"), "Away_2_x": 30.0}
-        )
+        row = pd.Series({"Away_1_x": float("nan"), "Away_2_x": 30.0})
         assert LeakLinesVisualizer()._find_player_gk(row, "Away") == "2"
 
 
@@ -496,22 +484,16 @@ class TestBallLineLabel:
 
     def test_ball_past_first_line_only(self) -> None:
         # Only the most-advanced line beaten → L2 (least dangerous in user conv.)
-        label = LeakLinesVisualizer()._ball_line_label(
-            12.0, {1: 9.0, 2: 19.0}
-        )
+        label = LeakLinesVisualizer()._ball_line_label(12.0, {1: 9.0, 2: 19.0})
         assert label == "L2"
 
     def test_ball_past_two_lines(self) -> None:
-        label = LeakLinesVisualizer()._ball_line_label(
-            22.0, {1: 9.0, 2: 19.0, 3: 26.0}
-        )
+        label = LeakLinesVisualizer()._ball_line_label(22.0, {1: 9.0, 2: 19.0, 3: 26.0})
         assert label == "L2"
 
     def test_ball_past_all_lines(self) -> None:
         # Ball behind deepest line = L1 in user convention (most dangerous)
-        label = LeakLinesVisualizer()._ball_line_label(
-            30.0, {1: 9.0, 2: 19.0, 3: 26.0}
-        )
+        label = LeakLinesVisualizer()._ball_line_label(30.0, {1: 9.0, 2: 19.0, 3: 26.0})
         assert label == "L1"
 
     def test_ball_on_opposite_side_returns_empty(self) -> None:

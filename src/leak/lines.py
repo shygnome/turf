@@ -172,9 +172,7 @@ def smooth_line_assignments(
     """Apply rolling majority-vote to line assignments to reduce flicker."""
     result = df.copy()
     line_cols = [
-        c
-        for c in df.columns
-        if c.startswith(team + "_") and c.endswith("_line")
+        c for c in df.columns if c.startswith(team + "_") and c.endswith("_line")
     ]
 
     def _mode(arr: npt.NDArray[np.float64]) -> float:
