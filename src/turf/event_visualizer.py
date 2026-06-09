@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 from matplotlib.animation import FuncAnimation
 from mplsoccer import Pitch  # type: ignore[import-untyped]
+
+from turf.tracking_utils import ball_xy, player_xy
 
 if TYPE_CHECKING:
     import pandas as pd  # type: ignore[import-untyped]
@@ -51,9 +52,9 @@ class EventVisualizer:
         row_home = home_frames.iloc[0]
         row_away = away_frames.iloc[0]
 
-        hx, hy = self._player_xy(row_home, "Home")
-        ax_x, ay = self._player_xy(row_away, "Away")
-        bx, by = self._ball_xy(row_home)
+        hx, hy = player_xy(row_home, "Home")
+        ax_x, ay = player_xy(row_away, "Away")
+        bx, by = ball_xy(row_home)
 
         if hx:
             pitch.scatter(hx, hy, ax=ax, color="royalblue", s=120, zorder=3)
@@ -119,9 +120,9 @@ class EventVisualizer:
             row_home = home_frames.iloc[frame_i]
             row_away = away_frames.iloc[frame_i]
 
-            hx, hy = self._player_xy(row_home, "Home")
-            ax_x, ay = self._player_xy(row_away, "Away")
-            bx, by = self._ball_xy(row_home)
+            hx, hy = player_xy(row_home, "Home")
+            ax_x, ay = player_xy(row_away, "Away")
+            bx, by = ball_xy(row_home)
 
             if hx:
                 home_scat.set_offsets(list(zip(hx, hy, strict=True)))
@@ -178,36 +179,6 @@ class EventVisualizer:
                 polyorder=polyorder,
             )
         return result
-
-    def _player_xy(
-        self, row: pd.Series, prefix: str
-    ) -> tuple[list[float], list[float]]:
-        xs: list[float] = []
-        ys: list[float] = []
-        n = 1
-        while True:
-            xc, yc = f"{prefix}_{n}_x", f"{prefix}_{n}_y"
-            if xc not in row.index:
-                break
-            try:
-                xf, yf = float(row[xc]), float(row[yc])
-            except (TypeError, ValueError):
-                n += 1
-                continue
-            if not (math.isnan(xf) or math.isnan(yf)):
-                xs.append(xf)
-                ys.append(yf)
-            n += 1
-        return xs, ys
-
-    def _ball_xy(self, row: pd.Series) -> tuple[float | None, float | None]:
-        try:
-            bx, by = float(row["ball_x"]), float(row["ball_y"])
-        except (KeyError, TypeError, ValueError):
-            return None, None
-        if math.isnan(bx) or math.isnan(by):
-            return None, None
-        return bx, by
 
     def _timestamp_str(self, clip: EventClip) -> str:
         return self._frame_timestamp_str(

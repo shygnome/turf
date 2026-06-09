@@ -18,6 +18,15 @@ def get_output_root() -> Path:
     return _DEFAULT_OUTPUT_ROOT
 
 
+def _resolve_pass_dir(dataset_id: str, match_id: str) -> tuple[Path, Path]:
+    output_root = get_output_root().resolve()
+    out_dir = (output_root / dataset_id / match_id / "pass").resolve()
+    if not out_dir.is_relative_to(output_root):
+        typer.echo("Invalid output path.", err=True)
+        raise typer.Exit(1)
+    return output_root, out_dir
+
+
 @_leak_app.command("extract-line")
 def extract_line(
     dataset_id: str = typer.Argument(..., help="Dataset ID from the catalog."),
@@ -40,11 +49,7 @@ def extract_line(
         typer.echo(f"Unknown dataset: {dataset_id}", err=True)
         raise typer.Exit(1)
 
-    output_root = get_output_root().resolve()
-    out_dir = (output_root / dataset_id / match_id / "pass").resolve()
-    if not out_dir.is_relative_to(output_root):
-        typer.echo("Invalid output path.", err=True)
-        raise typer.Exit(1)
+    _, out_dir = _resolve_pass_dir(dataset_id, match_id)
 
     meta_path = out_dir / "metadata.csv"
     if not meta_path.exists():
@@ -93,11 +98,7 @@ def label_pass(
         typer.echo(f"Unknown dataset: {dataset_id}", err=True)
         raise typer.Exit(1)
 
-    output_root = get_output_root().resolve()
-    out_dir = (output_root / dataset_id / match_id / "pass").resolve()
-    if not out_dir.is_relative_to(output_root):
-        typer.echo("Invalid output path.", err=True)
-        raise typer.Exit(1)
+    output_root, out_dir = _resolve_pass_dir(dataset_id, match_id)
 
     meta_path = out_dir / "metadata.csv"
     if not meta_path.exists():
@@ -131,11 +132,7 @@ def stats_pass(
         typer.echo(f"Unknown dataset: {dataset_id}", err=True)
         raise typer.Exit(1)
 
-    output_root = get_output_root().resolve()
-    out_dir = (output_root / dataset_id / match_id / "pass").resolve()
-    if not out_dir.is_relative_to(output_root):
-        typer.echo("Invalid output path.", err=True)
-        raise typer.Exit(1)
+    _, out_dir = _resolve_pass_dir(dataset_id, match_id)
 
     labeled_path = out_dir / "labeled_metadata.csv"
     if not labeled_path.exists():
@@ -237,11 +234,7 @@ def visualize_line(
         typer.echo(f"Unknown dataset: {dataset_id}", err=True)
         raise typer.Exit(1)
 
-    output_root = get_output_root().resolve()
-    out_dir = (output_root / dataset_id / match_id / "pass").resolve()
-    if not out_dir.is_relative_to(output_root):
-        typer.echo("Invalid output path.", err=True)
-        raise typer.Exit(1)
+    _, out_dir = _resolve_pass_dir(dataset_id, match_id)
 
     meta_path = out_dir / "metadata.csv"
     if not meta_path.exists():

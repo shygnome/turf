@@ -11,6 +11,7 @@ from matplotlib.text import Text
 from mplsoccer import Pitch  # type: ignore[import-untyped]
 
 from leak.lines import smooth_line_assignments
+from turf.tracking_utils import ball_xy
 
 if TYPE_CHECKING:
     import pandas as pd  # type: ignore[import-untyped]
@@ -276,7 +277,7 @@ class LeakLinesVisualizer:
             atk_gk_scat.set_offsets(atk_gk if atk_gk else np.empty((0, 2)))
 
             # Live ball
-            bx, by = self._ball_xy(row_def)
+            bx, by = ball_xy(row_def)
             if bx is not None:
                 ball_scat.set_offsets([[bx, by]])
             else:
@@ -479,41 +480,11 @@ class LeakLinesVisualizer:
             n += 1
         return result
 
-    def _player_xy(
-        self, row: pd.Series, prefix: str
-    ) -> tuple[list[float], list[float]]:
-        xs: list[float] = []
-        ys: list[float] = []
-        n = 1
-        while True:
-            xc, yc = f"{prefix}_{n}_x", f"{prefix}_{n}_y"
-            if xc not in row.index:
-                break
-            try:
-                xf, yf = float(row[xc]), float(row[yc])
-            except (TypeError, ValueError):
-                n += 1
-                continue
-            if not (math.isnan(xf) or math.isnan(yf)):
-                xs.append(xf)
-                ys.append(yf)
-            n += 1
-        return xs, ys
-
     def _ball_xy_pair(self, row: pd.Series) -> tuple[float, float] | None:
-        bx, by = self._ball_xy(row)
+        bx, by = ball_xy(row)
         if bx is not None and by is not None:
             return (bx, by)
         return None
-
-    def _ball_xy(self, row: pd.Series) -> tuple[float | None, float | None]:
-        try:
-            bx, by = float(row["ball_x"]), float(row["ball_y"])
-        except (KeyError, TypeError, ValueError):
-            return None, None
-        if math.isnan(bx) or math.isnan(by):
-            return None, None
-        return bx, by
 
     def _players_by_line(
         self, row: pd.Series, team: str
