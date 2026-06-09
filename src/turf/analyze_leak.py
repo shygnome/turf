@@ -49,8 +49,7 @@ def extract_line(
     meta_path = out_dir / "metadata.csv"
     if not meta_path.exists():
         typer.echo(
-            f"metadata.csv not found at {meta_path}. "
-            "Run 'turf event extract' first.",
+            f"metadata.csv not found at {meta_path}. Run 'turf event extract' first.",
             err=True,
         )
         raise typer.Exit(1)
@@ -81,6 +80,130 @@ def extract_line(
         count += 1
 
     typer.echo(f"Extracted unit lines for {count} event(s) to {out_dir}")
+
+
+@_leak_app.command("label-pass")
+def label_pass(
+    dataset_id: str = typer.Argument(..., help="Dataset ID from the catalog."),
+    match_id: str = typer.Argument(..., help="Match ID."),
+) -> None:
+    """Label pass events with line-break attributes (is_line_breaking, lines_broken)."""
+    entry = next((e for e in CATALOG if e.id == dataset_id), None)
+    if entry is None:
+        typer.echo(f"Unknown dataset: {dataset_id}", err=True)
+        raise typer.Exit(1)
+
+    output_root = get_output_root().resolve()
+    out_dir = (output_root / dataset_id / match_id / "pass").resolve()
+    if not out_dir.is_relative_to(output_root):
+        typer.echo("Invalid output path.", err=True)
+        raise typer.Exit(1)
+
+    meta_path = out_dir / "metadata.csv"
+    if not meta_path.exists():
+        typer.echo(
+            f"metadata.csv not found at {meta_path}. "
+            "Run 'turf event extract' and 'turf analyze leak extract-line' first.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from turf.pass_label import label_all_passes
+
+    labeled = label_all_passes(output_root, dataset_id, match_id)
+    n_labeled = int(labeled["is_line_breaking"].notna().sum())
+    n_breaking = int(labeled["is_line_breaking"].eq(True).sum())
+    typer.echo(
+        f"Labeled {n_labeled} pass event(s): "
+        f"{n_breaking} line-breaking. "
+        f"Written to {out_dir / 'labeled_metadata.csv'}"
+    )
+
+
+@_leak_app.command("stats-pass")
+def stats_pass(
+    dataset_id: str = typer.Argument(..., help="Dataset ID from the catalog."),
+    match_id: str = typer.Argument(..., help="Match ID."),
+) -> None:
+    """Print summary statistics for labeled pass events."""
+    entry = next((e for e in CATALOG if e.id == dataset_id), None)
+    if entry is None:
+        typer.echo(f"Unknown dataset: {dataset_id}", err=True)
+        raise typer.Exit(1)
+
+    output_root = get_output_root().resolve()
+    out_dir = (output_root / dataset_id / match_id / "pass").resolve()
+    if not out_dir.is_relative_to(output_root):
+        typer.echo("Invalid output path.", err=True)
+        raise typer.Exit(1)
+
+    labeled_path = out_dir / "labeled_metadata.csv"
+    if not labeled_path.exists():
+        typer.echo(
+            f"labeled_metadata.csv not found at {labeled_path}. "
+            "Run 'turf analyze leak label-pass' first.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    import pandas as pd  # noqa: PLC0415
+
+    from turf.pass_label import compute_pass_stats
+
+    df = pd.read_csv(labeled_path)
+    s = compute_pass_stats(df)
+
+    def _pct(n: int, total: int) -> str:
+        return f"{n / total * 100:.1f}%" if total else "—"
+
+    sep = "-" * 50
+    header = f"Pass labeling summary - {dataset_id} / {match_id}"
+    typer.echo(f"\n{header}")
+    typer.echo(sep)
+
+    skip_note = f"  ({s['n_skipped']} skipped - no lines.csv)" if s["n_skipped"] else ""
+    typer.echo(f"Total labeled:      {s['n_labeled']:>5}{skip_note}")
+    n_tot = s["n_labeled"]
+    typer.echo(
+        f"Line-breaking:      {s['n_breaking']:>5}  ({_pct(s['n_breaking'], n_tot)})"
+    )
+    typer.echo(
+        f"Not line-breaking:  {s['n_not_breaking']:>5}"
+        f"  ({_pct(s['n_not_breaking'], n_tot)})"
+    )
+
+    if s["lines_broken_dist"]:
+        typer.echo(f"\nLines broken (of {s['n_breaking']} line-breaking passes)")
+        for k in sorted(s["lines_broken_dist"]):
+            cnt = s["lines_broken_dist"][k]
+            label = "line " if k == 1 else "lines"
+            typer.echo(f"  {k} {label}:  {cnt:>4}  ({_pct(cnt, s['n_breaking'])})")
+
+    if s["by_subtype"]:
+        typer.echo("\nBy outcome (subtype)")
+        for subtype, v in s["by_subtype"].items():
+            typer.echo(
+                f"  {subtype:<12} {v['breaking']:>4} / {v['total']:>4}"
+                f"  ({_pct(v['breaking'], v['total'])})"
+            )
+
+    if s["by_team"]:
+        typer.echo("\nBy team")
+        for team, v in s["by_team"].items():
+            typer.echo(
+                f"  {team:<8} {v['breaking']:>4} / {v['total']:>4}"
+                f"  ({_pct(v['breaking'], v['total'])})"
+            )
+
+    if s["by_period"]:
+        typer.echo("\nBy period")
+        for period, v in s["by_period"].items():
+            typer.echo(
+                f"  Period {period}  {v['breaking']:>4} / {v['total']:>4}"
+                f"  ({_pct(v['breaking'], v['total'])})"
+            )
+
+    typer.echo("")
 
 
 @_leak_app.command("visualize-line")
@@ -123,8 +246,7 @@ def visualize_line(
     meta_path = out_dir / "metadata.csv"
     if not meta_path.exists():
         typer.echo(
-            f"metadata.csv not found at {meta_path}. "
-            "Run 'turf event extract' first.",
+            f"metadata.csv not found at {meta_path}. Run 'turf event extract' first.",
             err=True,
         )
         raise typer.Exit(1)
