@@ -32,7 +32,7 @@ uv run turf dataset set-root /path/to/data
 # 2. See which datasets are in the catalog and present locally
 uv run turf dataset ls
 
-# 3. Preprocess a raw dataset (PFF only — StatsBomb datasets need no preparation)
+# 3. Preprocess a raw dataset
 uv run turf dataset prepare pff/fifa-wc-2022
 
 # 4. Browse matches
