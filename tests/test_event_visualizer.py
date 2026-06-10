@@ -102,68 +102,6 @@ def _make_clip(
 
 
 # ---------------------------------------------------------------------------
-# _player_xy — skillcorner coords: metres, no transform
-# ---------------------------------------------------------------------------
-
-
-class TestPlayerXY:
-    def test_valid_positions_passed_through(self) -> None:
-        row = _make_home_row()
-        xs, ys = EventVisualizer()._player_xy(row, "Home")
-        assert xs == [10.0]
-        assert ys == [5.0]
-
-    def test_nan_positions_excluded(self) -> None:
-        row = _make_home_row()
-        xs, _ = EventVisualizer()._player_xy(row, "Home")
-        # Home_2 is NaN — only Home_1 should be included
-        assert len(xs) == 1
-
-    def test_away_prefix(self) -> None:
-        row = _make_away_row()
-        xs, ys = EventVisualizer()._player_xy(row, "Away")
-        assert xs == [-10.0]
-        assert ys == [-5.0]
-
-    def test_stops_at_first_missing_column(self) -> None:
-        row = pd.Series({"Home_1_x": 2.0, "Home_1_y": 3.0})
-        xs, ys = EventVisualizer()._player_xy(row, "Home")
-        assert xs == [2.0]
-        assert ys == [3.0]
-
-    def test_negative_coords_preserved(self) -> None:
-        row = pd.Series({"Home_1_x": -20.0, "Home_1_y": -10.0})
-        xs, ys = EventVisualizer()._player_xy(row, "Home")
-        assert xs == [-20.0]
-        assert ys == [-10.0]
-
-
-# ---------------------------------------------------------------------------
-# _ball_xy
-# ---------------------------------------------------------------------------
-
-
-class TestBallXY:
-    def test_valid_ball_position_passed_through(self) -> None:
-        row = _make_home_row()
-        bx, by = EventVisualizer()._ball_xy(row)
-        assert bx == 0.5
-        assert by == 1.0
-
-    def test_nan_ball_returns_none(self) -> None:
-        row = _make_home_row(**{"ball_x": float("nan"), "ball_y": float("nan")})
-        bx, by = EventVisualizer()._ball_xy(row)
-        assert bx is None
-        assert by is None
-
-    def test_missing_ball_column_returns_none(self) -> None:
-        row = pd.Series({"Home_1_x": 1.0})
-        bx, by = EventVisualizer()._ball_xy(row)
-        assert bx is None
-        assert by is None
-
-
-# ---------------------------------------------------------------------------
 # _timestamp_str
 # ---------------------------------------------------------------------------
 

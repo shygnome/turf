@@ -600,13 +600,9 @@ def test_load_normalizes_period2_tracking_times(
     loader = MatchLoader(dataset_id="pff/fifa-wc-2022", root=preprocessed_root)
     data = loader.load("9500")
 
-    p2_home = data.home_tracking.loc[
-        data.home_tracking["Period"] == 2, "Time [s]"
-    ]
+    p2_home = data.home_tracking.loc[data.home_tracking["Period"] == 2, "Time [s]"]
     assert p2_home.iloc[0] == pytest.approx(2700.0)
     assert p2_home.iloc[1] == pytest.approx(2701.0)
 
-    p2_away = data.away_tracking.loc[
-        data.away_tracking["Period"] == 2, "Time [s]"
-    ]
+    p2_away = data.away_tracking.loc[data.away_tracking["Period"] == 2, "Time [s]"]
     assert p2_away.iloc[0] == pytest.approx(2700.0)
