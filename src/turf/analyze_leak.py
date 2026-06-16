@@ -42,7 +42,7 @@ def extract_line(
 
     import pandas as pd  # type: ignore[import-untyped]
 
-    from leak.lines import analyze_lines
+    from leak.lines import analyze_lines, fix_player_assignments, vote_line_count
 
     entry = next((e for e in CATALOG if e.id == dataset_id), None)
     if entry is None:
@@ -74,8 +74,18 @@ def extract_line(
 
         frames_df = pd.read_csv(frames_path)
         try:
-            lines_df = analyze_lines(
+            first_pass = analyze_lines(
                 frames_df, defending_team, min_line_gap=min_line_gap
+            )
+            k_voted = vote_line_count(first_pass)
+            lines_df = fix_player_assignments(
+                analyze_lines(
+                    frames_df,
+                    defending_team,
+                    min_line_gap=min_line_gap,
+                    force_n_lines=k_voted,
+                ),
+                defending_team,
             )
         except ValueError as exc:
             typer.echo(f"  skip {event_idx}: {exc}", err=True)
@@ -223,6 +233,11 @@ def visualize_line(
     debug: bool = typer.Option(
         False, "--debug/--no-debug", help="Overlay inter-line gap labels."
     ),
+    show_labels: bool = typer.Option(
+        False,
+        "--show-labels/--no-show-labels",
+        help="Overlay Phase 2 pass labels as sequential reveal animation.",
+    ),
 ) -> None:
     """Visualize defending team unit lines as animated GIF clips."""
     if fps <= 0:
@@ -244,6 +259,8 @@ def visualize_line(
         )
         raise typer.Exit(1)
 
+    import ast
+
     import matplotlib.pyplot as plt
     import pandas as pd
     from tqdm import tqdm  # type: ignore[import-untyped]
@@ -251,6 +268,21 @@ def visualize_line(
     from turf.leak_lines_visualizer import LeakLinesVisualizer
 
     metadata = pd.read_csv(meta_path)
+
+    # ── labeled metadata for --show-labels ───────────────────────────────────
+    labeled_lookup: dict[int, dict[str, object]] = {}
+    if show_labels:
+        labeled_path = out_dir / "labeled_metadata.csv"
+        if labeled_path.exists():
+            ldf = pd.read_csv(labeled_path)
+            for _, lr in ldf.iterrows():
+                if pd.notna(lr.get("is_line_breaking")):
+                    labeled_lookup[int(lr["event_idx"])] = dict(lr)
+        else:
+            typer.echo(
+                f"  Warning: {labeled_path} not found — run 'label-pass' first.",
+                err=True,
+            )
 
     if event_idx is None:
         metadata = metadata.head(_DEFAULT_VISUALIZE_LIMIT)
@@ -299,6 +331,44 @@ def visualize_line(
         n_frames = min(len(def_df), len(atk_df))
         gif_path = event_dir / "linevis.gif"
 
+        # ── build pass_labels for --show-labels ──────────────────────────────
+        pass_labels: dict[str, object] | None = None
+        if show_labels and eidx in labeled_lookup:
+            lrow = labeled_lookup[eidx]
+            if bool(lrow.get("is_line_breaking")):
+                from leak.pass_label import (
+                    compute_team_hull_vertices,
+                    detect_attack_direction,
+                )
+
+                try:
+                    attack_dir = detect_attack_direction(def_df, defending_team)
+                    hull_verts = compute_team_hull_vertices(
+                        def_df, defending_team, attack_dir
+                    )
+
+                    def _parse_list(raw: object) -> list[object]:
+                        s = str(raw)
+                        if s in ("nan", "None", ""):
+                            return []
+                        return ast.literal_eval(s)  # type: ignore[no-any-return]
+
+                    lbc_raw = lrow.get("lines_broken_count")
+                    lbc_ok = lbc_raw is not None and str(lbc_raw) != "nan"
+                    lbc = int(float(str(lbc_raw))) if lbc_ok else 0
+                    pass_labels = {
+                        "is_line_breaking": bool(lrow["is_line_breaking"]),
+                        "lines_broken_count": lbc,
+                        "lines_broken": _parse_list(lrow.get("lines_broken", "[]")),
+                        "direction_per_line": _parse_list(
+                            lrow.get("direction_per_line", "[]")
+                        ),
+                        "location_after_break": lrow.get("location_after_break"),
+                        "hull_vertices": hull_verts,
+                    }
+                except Exception:
+                    pass_labels = None
+
         anim = viz.animate(
             def_df,
             atk_df,
@@ -308,6 +378,7 @@ def visualize_line(
             fps=fps,
             smooth_lines=smooth_lines,
             debug=debug,
+            pass_labels=pass_labels,
         )
         with tqdm(
             total=n_frames,

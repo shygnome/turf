@@ -198,6 +198,16 @@ def test_extract_line_home_defending_has_home_line_cols(
     assert all(c.startswith("Home_") for c in line_cols)
 
 
+def test_extract_line_produces_consistent_line_count(
+    extract_line_result: tuple,
+) -> None:
+    """Two-pass extraction: every frame in lines.csv must share the same line_count."""
+    _, out_dir = extract_line_result
+    df = pd.read_csv(out_dir / "0" / "lines.csv")
+    non_zero = df.loc[df["line_count"] > 0, "line_count"]
+    assert non_zero.nunique() == 1
+
+
 def test_extract_line_preserves_original_columns(
     extract_line_result: tuple,
 ) -> None:
@@ -571,3 +581,137 @@ def test_visualize_line_no_smooth_lines_passes_false(
     )
     for call in mock_cls.return_value.animate.call_args_list:
         assert call.kwargs.get("smooth_lines") is False
+
+
+# ---------------------------------------------------------------------------
+# visualize-line --show-labels
+# ---------------------------------------------------------------------------
+
+
+def _write_labeled_metadata(out_dir: Path) -> None:
+    """Write a labeled_metadata.csv with event 0 marked as line-breaking."""
+    df = pd.DataFrame(
+        {
+            "event_idx": [0, 1, 2],
+            "team": ["Home", "Home", "Away"],
+            "period": [1, 1, 1],
+            "subtype": ["success", "success", "fail"],
+            "is_line_breaking": [True, False, False],
+            "lines_broken_count": [1, 0, 0],
+            "lines_broken": ["[1]", "[]", "[]"],
+            "direction_per_line": ["['Through']", "[]", "[]"],
+            "location_after_break": ["Inside", None, None],
+        }
+    )
+    df.to_csv(out_dir / "labeled_metadata.csv", index=False)
+
+
+@pytest.fixture()
+def pass_output_dir_with_labels(pass_output_dir_with_lines: Path) -> Path:
+    out_dir = pass_output_dir_with_lines / Path(DATASET_ID) / MATCH_ID / "pass"
+    _write_labeled_metadata(out_dir)
+    return pass_output_dir_with_lines
+
+
+def test_show_labels_flag_passes_pass_labels_for_line_breaking_events(
+    pass_output_dir_with_labels: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "turf.analyze_leak.get_output_root", lambda: pass_output_dir_with_labels
+    )
+    mock_cls, _ = _mock_leak_visualizer(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["analyze", "leak", "visualize-line", DATASET_ID, MATCH_ID, "--show-labels"],
+    )
+    assert result.exit_code == 0
+    calls = mock_cls.return_value.animate.call_args_list
+    # Event 0 is line-breaking → pass_labels should be a dict
+    assert any(
+        isinstance(call.kwargs.get("pass_labels"), dict) for call in calls
+    )
+
+
+def test_show_labels_non_breaking_event_passes_none_labels(
+    pass_output_dir_with_labels: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "turf.analyze_leak.get_output_root", lambda: pass_output_dir_with_labels
+    )
+    mock_cls, _ = _mock_leak_visualizer(monkeypatch)
+    runner.invoke(
+        app,
+        [
+            "analyze",
+            "leak",
+            "visualize-line",
+            DATASET_ID,
+            MATCH_ID,
+            "--show-labels",
+            "--event-idx",
+            "1",
+        ],
+    )
+    calls = mock_cls.return_value.animate.call_args_list
+    # Event 1 is not line-breaking → pass_labels should be None
+    assert all(call.kwargs.get("pass_labels") is None for call in calls)
+
+
+def test_show_labels_without_labeled_metadata_exits_ok(
+    pass_output_dir_with_lines: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No labeled_metadata.csv — command must still succeed
+    monkeypatch.setattr(
+        "turf.analyze_leak.get_output_root", lambda: pass_output_dir_with_lines
+    )
+    mock_cls, _ = _mock_leak_visualizer(monkeypatch)
+    result = runner.invoke(
+        app,
+        ["analyze", "leak", "visualize-line", DATASET_ID, MATCH_ID, "--show-labels"],
+    )
+    assert result.exit_code == 0
+    for call in mock_cls.return_value.animate.call_args_list:
+        assert call.kwargs.get("pass_labels") is None
+
+
+def test_no_show_labels_passes_none_to_animate(
+    pass_output_dir_with_lines: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "turf.analyze_leak.get_output_root", lambda: pass_output_dir_with_lines
+    )
+    mock_cls, _ = _mock_leak_visualizer(monkeypatch)
+    runner.invoke(app, ["analyze", "leak", "visualize-line", DATASET_ID, MATCH_ID])
+    for call in mock_cls.return_value.animate.call_args_list:
+        assert call.kwargs.get("pass_labels") is None
+
+
+def test_show_labels_pass_labels_contains_required_keys(
+    pass_output_dir_with_labels: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "turf.analyze_leak.get_output_root", lambda: pass_output_dir_with_labels
+    )
+    mock_cls, _ = _mock_leak_visualizer(monkeypatch)
+    runner.invoke(
+        app,
+        [
+            "analyze",
+            "leak",
+            "visualize-line",
+            DATASET_ID,
+            MATCH_ID,
+            "--show-labels",
+            "--event-idx",
+            "0",
+        ],
+    )
+    calls = mock_cls.return_value.animate.call_args_list
+    assert len(calls) == 1
+    pl = calls[0].kwargs.get("pass_labels")
+    assert isinstance(pl, dict)
+    required_keys = (
+        "is_line_breaking", "lines_broken", "direction_per_line", "hull_vertices"
+    )
+    for key in required_keys:
+        assert key in pl

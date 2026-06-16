@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from matplotlib.animation import FuncAnimation
@@ -53,6 +53,8 @@ class LeakLinesVisualizer:
         fps: float = 25.0,
         smooth_lines: bool = True,
         debug: bool = False,
+        pass_labels: dict[str, object] | None = None,
+        freeze_duration: float = 5.0,
     ) -> FuncAnimation:
         """Return a FuncAnimation stepping through every tracking frame."""
         if smooth_lines:
@@ -77,6 +79,19 @@ class LeakLinesVisualizer:
 
         n_frames = min(len(defending_frames), len(attacking_frames))
 
+        # Stable L-label mapping: computed once from the last tracking frame.
+        # Sorted ascending by abs(repr_x) so L1 = most advanced (front) line.
+        last_lp = self._players_by_line(defending_frames.iloc[-1], defending_team)
+        last_repr_xs: dict[int, float] = {
+            ln: self._repr_x(last_lp[ln], def_gk_x)
+            for ln in range(1, _MAX_LINES + 1)
+            if last_lp.get(ln)
+        }
+        sorted_by_advance = sorted(last_repr_xs, key=lambda ln: abs(last_repr_xs[ln]))
+        ln_to_user_stable: dict[int, int] = {
+            ln: i + 1 for i, ln in enumerate(sorted_by_advance)
+        }
+
         # Attacking GK ID — stable across frames, derived from first frame
         atk_gk_id = self._find_player_gk(attacking_frames.iloc[0], attacking_team)
 
@@ -85,8 +100,9 @@ class LeakLinesVisualizer:
             self._ball_xy_pair(defending_frames.iloc[i]) for i in range(n_frames)
         ]
 
-        # Starting ball position and which unit line it is already behind
+        # Starting and ending ball positions
         start_ball: tuple[float, float] | None = ball_trail[0] if ball_trail else None
+        end_ball: tuple[float, float] | None = ball_trail[-1] if ball_trail else None
         start_label = ""
         if start_ball is not None:
             lp0 = self._players_by_line(defending_frames.iloc[0], defending_team)
@@ -264,9 +280,73 @@ class LeakLinesVisualizer:
         title = ax.set_title("")
         period = metadata.get("period", 1)
 
+        # ── reveal artists (only when pass_labels provided) ──────────────────
+        n_reveal = int(freeze_duration * fps) if pass_labels is not None else 0
+
+        hull_patches: list[Any] = []
+        pass_arrow = None
+        passer_ring = None
+        receiver_ring = None
+        info_text = None
+
+        if pass_labels is not None:
+            import matplotlib.patches as mpatches
+
+            hv_list = pass_labels.get("hull_vertices")
+            if hv_list and isinstance(hv_list, list):
+                for hv in hv_list:
+                    if hv and len(hv) >= 3:
+                        patch = mpatches.Polygon(
+                            hv,
+                            closed=True,
+                            fill=False,
+                            hatch="////",
+                            edgecolor="#FFB300",
+                            linewidth=1.0,
+                            visible=False,
+                            zorder=2,
+                        )
+                        ax.add_patch(patch)
+                        hull_patches.append(patch)
+
+            if start_ball is not None and end_ball is not None:
+                pass_arrow = mpatches.FancyArrowPatch(
+                    posA=start_ball,
+                    posB=end_ball,
+                    arrowstyle="->,head_width=4,head_length=3",
+                    color="white",
+                    linewidth=2.5,
+                    visible=False,
+                    zorder=8,
+                )
+                ax.add_patch(pass_arrow)
+
+            passer_ring = ax.scatter(
+                [], [], s=350, facecolors="none", edgecolors="yellow",
+                linewidths=2.5, zorder=9,
+            )
+            receiver_ring = ax.scatter(
+                [], [], s=350, facecolors="none", edgecolors="lime",
+                linewidths=2.5, zorder=9,
+            )
+            info_text = ax.text(
+                -48.0,
+                22.0,
+                "",
+                color="white",
+                fontsize=9,
+                va="top",
+                bbox={"facecolor": "#111111", "alpha": 0.8, "boxstyle": "round"},
+                visible=False,
+                zorder=10,
+            )
+
         def _update(frame_i: int) -> tuple[object, ...]:
-            row_def = defending_frames.iloc[frame_i]
-            row_atk = attacking_frames.iloc[frame_i]
+            eff_frame = min(frame_i, n_frames - 1)
+            reveal_frame = frame_i - n_frames
+
+            row_def = defending_frames.iloc[eff_frame]
+            row_atk = attacking_frames.iloc[eff_frame]
 
             # Attacking team — split GK from outfield
             atk_all = self._player_xy_with_ids(row_atk, attacking_team)
@@ -284,7 +364,7 @@ class LeakLinesVisualizer:
                 ball_scat.set_offsets(np.empty((0, 2)))
 
             # Ball trail with alpha gradient (oldest = most transparent)
-            valid_trail = [p for p in ball_trail[: frame_i + 1] if p is not None]
+            valid_trail = [p for p in ball_trail[: eff_frame + 1] if p is not None]
             if valid_trail:
                 n_t = len(valid_trail)
                 alphas = (
@@ -315,17 +395,11 @@ class LeakLinesVisualizer:
                 all_outfield if all_outfield else np.empty((0, 2))
             )
 
-            # Repr x per active line; sort deepest first (highest abs) for L1=deepest
+            # Repr x per active line; user label from stable mapping (L1=front)
             repr_xs_active: dict[int, float] = {
                 ln: self._repr_x(line_players[ln], def_gk_x)
                 for ln in range(1, _MAX_LINES + 1)
                 if line_players.get(ln)
-            }
-            sorted_by_depth = sorted(
-                repr_xs_active, key=lambda ln: abs(repr_xs_active[ln]), reverse=True
-            )
-            ln_to_user: dict[int, int] = {
-                ln: i + 1 for i, ln in enumerate(sorted_by_depth)
             }
 
             for ln in range(1, _MAX_LINES + 1):
@@ -338,7 +412,7 @@ class LeakLinesVisualizer:
                         )
                     else:
                         zigzag_lines[ln].set_data([], [])
-                    user_ln = ln_to_user[ln]
+                    user_ln = ln_to_user_stable.get(ln, ln)
                     color = _LINE_COLORS[user_ln]
                     rx = repr_xs_active[ln]
                     zigzag_lines[ln].set_color(color)
@@ -352,6 +426,11 @@ class LeakLinesVisualizer:
                     zigzag_lines[ln].set_data([], [])
                     repr_lines[ln].set_data([], [])
                     line_labels[ln].set_visible(False)
+
+            # Hide unit-line text labels during freeze/reveal to avoid visual confusion
+            if pass_labels is not None and reveal_frame >= 0:
+                for lb in line_labels.values():
+                    lb.set_visible(False)
 
             # Debug: inter-line gap in metres between adjacent repr lines
             if debug:
@@ -369,6 +448,64 @@ class LeakLinesVisualizer:
             ts = self._frame_timestamp_str(row_def, period)
             title.set_text(f"Unit Lines | {ts}")
 
+            # ── sequential reveal during freeze phase ────────────────────────
+            reveal_artists: tuple[object, ...] = ()
+            if pass_labels is not None:
+                phase1_thr = int(fps * 1)
+                phase2_thr = int(fps * 2)
+                phase3_thr = int(fps * 3)
+
+                in_phase1 = reveal_frame >= phase1_thr
+                in_phase2 = reveal_frame >= phase2_thr
+                in_phase3 = reveal_frame >= phase3_thr
+
+                for hp in hull_patches:
+                    hp.set_visible(in_phase1)
+                if pass_arrow is not None:
+                    pass_arrow.set_visible(in_phase2)
+
+                if in_phase2 and passer_ring is not None and receiver_ring is not None:
+                    if start_ball is not None:
+                        pp = self._closest_player_xy(
+                            attacking_frames.iloc[0],
+                            attacking_team,
+                            start_ball[0],
+                            start_ball[1],
+                        )
+                        passer_ring.set_offsets([pp] if pp else np.empty((0, 2)))
+                    else:
+                        passer_ring.set_offsets(np.empty((0, 2)))
+                    if end_ball is not None:
+                        rp = self._closest_player_xy(
+                            attacking_frames.iloc[-1],
+                            attacking_team,
+                            end_ball[0],
+                            end_ball[1],
+                        )
+                        receiver_ring.set_offsets([rp] if rp else np.empty((0, 2)))
+                    else:
+                        receiver_ring.set_offsets(np.empty((0, 2)))
+                elif passer_ring is not None and receiver_ring is not None:
+                    passer_ring.set_offsets(np.empty((0, 2)))
+                    receiver_ring.set_offsets(np.empty((0, 2)))
+
+                if info_text is not None:
+                    info_text.set_visible(in_phase3)
+                    if in_phase3 and not info_text.get_text():
+                        info_text.set_text(self._build_info_text(pass_labels))
+
+                ra: list[object] = []
+                ra.extend(hull_patches)
+                if pass_arrow is not None:
+                    ra.append(pass_arrow)
+                if passer_ring is not None:
+                    ra.append(passer_ring)
+                if receiver_ring is not None:
+                    ra.append(receiver_ring)
+                if info_text is not None:
+                    ra.append(info_text)
+                reveal_artists = tuple(ra)
+
             return (
                 atk_outfield_scat,
                 atk_gk_scat,
@@ -381,12 +518,14 @@ class LeakLinesVisualizer:
                 *line_labels.values(),
                 *gap_texts.values(),
                 title,
+                *reveal_artists,
             )
 
+        total_frames = n_frames + n_reveal
         return FuncAnimation(
             fig,
             _update,  # type: ignore[arg-type]
-            frames=n_frames,
+            frames=total_frames,
             interval=1000.0 / fps,
             blit=True,
         )
@@ -418,9 +557,9 @@ class LeakLinesVisualizer:
 
     @staticmethod
     def _ball_line_label(ball_x: float, line_repr_xs: dict[int, float]) -> str:
-        """Return 'L{n}' for the deepest line beaten (L1=most dangerous/deepest).
+        """Return 'L{n}' for the deepest line beaten by ball_x.
 
-        Ranks lines by abs(repr_x) descending: highest abs = closest to GK = L1.
+        Ranks lines by abs(repr_x) ascending: smallest abs = most advanced = L1.
         """
         beaten_lns = {
             ln: abs(rx)
@@ -431,7 +570,7 @@ class LeakLinesVisualizer:
             return ""
         deepest_ln = max(beaten_lns, key=lambda ln: beaten_lns[ln])
         all_sorted = sorted(
-            line_repr_xs, key=lambda ln: abs(line_repr_xs[ln]), reverse=True
+            line_repr_xs, key=lambda ln: abs(line_repr_xs[ln]), reverse=False
         )
         user_rank = all_sorted.index(deepest_ln) + 1
         return f"L{user_rank}"
@@ -515,3 +654,45 @@ class LeakLinesVisualizer:
         m, s = divmod(seconds, 60)
         half = "H1" if int(str(period)) == 1 else "H2"
         return f"{half} {m:02d}:{s:02d}"
+
+    def _closest_player_xy(
+        self, row: pd.Series, team: str, ref_x: float, ref_y: float
+    ) -> tuple[float, float] | None:
+        """Return (x, y) of the team player closest to (ref_x, ref_y)."""
+        best: tuple[float, float] | None = None
+        best_dist = float("inf")
+        n = 1
+        while True:
+            xc, yc = f"{team}_{n}_x", f"{team}_{n}_y"
+            if xc not in row.index:
+                break
+            try:
+                xf, yf = float(row[xc]), float(row[yc])
+            except (TypeError, ValueError):
+                n += 1
+                continue
+            if math.isnan(xf) or math.isnan(yf):
+                n += 1
+                continue
+            dist = (xf - ref_x) ** 2 + (yf - ref_y) ** 2
+            if dist < best_dist:
+                best_dist = dist
+                best = (xf, yf)
+            n += 1
+        return best
+
+    @staticmethod
+    def _build_info_text(pass_labels: dict[str, object]) -> str:
+        is_lb = pass_labels.get("is_line_breaking")
+        lbc = pass_labels.get("lines_broken_count", 0)
+        direction = pass_labels.get("direction_per_line", [])
+        location = pass_labels.get("location_after_break")
+        lines_out = [
+            f"Line-breaking: {'Yes' if is_lb else 'No'}",
+            f"Lines broken: {lbc}",
+        ]
+        if direction and isinstance(direction, list):
+            lines_out.append(f"Direction: {', '.join(str(d) for d in direction)}")
+        if location:
+            lines_out.append(f"Location: {location}")
+        return "\n".join(lines_out)

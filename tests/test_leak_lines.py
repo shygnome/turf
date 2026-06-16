@@ -4,12 +4,15 @@ from collections import Counter
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from leak.lines import (
     analyze_lines,
     detect_lines_frame,
     find_goalkeeper,
+    fix_player_assignments,
     smooth_line_assignments,
+    vote_line_count,
 )
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
@@ -49,11 +52,27 @@ class TestFindGoalkeeper:
         df = _away_df(**{"2": 10.0, "3": 44.0, "4": 18.0})
         assert find_goalkeeper(df, "Away") == "3"
 
-    def test_uses_first_row_only(self) -> None:
-        df = pd.DataFrame(
-            [{"Away_2_x": 10.0, "Away_3_x": 44.0}, {"Away_2_x": 55.0, "Away_3_x": 5.0}]
-        )
-        assert find_goalkeeper(df, "Away") == "3"
+    def test_majority_vote_overrides_bad_first_frame(self) -> None:
+        # Frame 0: tracking swap — player 2 appears deep (wrong)
+        # Frames 1-3: player 3 is consistently the deepest (correct GK)
+        rows = [
+            {"Away_2_x": 50.0, "Away_3_x": 20.0},
+            {"Away_2_x": 10.0, "Away_3_x": 44.0},
+            {"Away_2_x": 10.0, "Away_3_x": 44.0},
+            {"Away_2_x": 10.0, "Away_3_x": 44.0},
+        ]
+        assert find_goalkeeper(pd.DataFrame(rows), "Away") == "3"
+
+    def test_minority_bad_frames_do_not_flip_result(self) -> None:
+        # 1 bad frame out of 5 should not change the result
+        rows = [
+            {"Away_1_x": 44.0, "Away_5_x": 10.0},  # correct
+            {"Away_1_x": 44.0, "Away_5_x": 10.0},  # correct
+            {"Away_1_x": 10.0, "Away_5_x": 44.0},  # bad tracking frame
+            {"Away_1_x": 44.0, "Away_5_x": 10.0},  # correct
+            {"Away_1_x": 44.0, "Away_5_x": 10.0},  # correct
+        ]
+        assert find_goalkeeper(pd.DataFrame(rows), "Away") == "1"
 
     def test_negative_x_side(self) -> None:
         df = _away_df(**{"2": -5.0, "3": -43.0, "4": -12.0})
@@ -302,3 +321,126 @@ class TestSmoothLineAssignments:
         result = smooth_line_assignments(lined, "Away", window=5)
         # Smoothing must not invent a value where the original was NaN
         assert pd.isna(result.at[2, "Away_2_line"])
+
+
+# ── analyze_lines force_n_lines ───────────────────────────────────────────────
+
+
+class TestAnalyzeLinesForceNLines:
+    def test_force_two_lines_gives_consistent_count(self) -> None:
+        df = _event_df()
+        result = analyze_lines(df, "Away", force_n_lines=2)
+        assert (result["line_count"] == 2).all()
+
+    def test_force_three_lines_gives_consistent_count(self) -> None:
+        df = _event_df()
+        result = analyze_lines(df, "Away", force_n_lines=3)
+        assert (result["line_count"] == 3).all()
+
+    def test_force_n_lines_none_matches_default(self) -> None:
+        df = _event_df()
+        pd.testing.assert_frame_equal(
+            analyze_lines(df, "Away"),
+            analyze_lines(df, "Away", force_n_lines=None),
+        )
+
+    def test_force_n_lines_outfield_players_still_assigned(self) -> None:
+        df = _event_df()
+        result = analyze_lines(df, "Away", force_n_lines=2)
+        for pid in ["2", "6", "7", "9", "10", "11"]:
+            vals = result[f"Away_{pid}_line"].dropna()
+            assert vals.between(1, 4).all()
+
+
+# ── vote_line_count ───────────────────────────────────────────────────────────
+
+
+class TestVoteLineCount:
+    def test_returns_most_common_count(self) -> None:
+        df = pd.DataFrame({"line_count": [3, 3, 3, 2, 3, 4, 3]})
+        assert vote_line_count(df) == 3
+
+    def test_ignores_zero_counts(self) -> None:
+        df = pd.DataFrame({"line_count": [0, 3, 3, 0, 3]})
+        assert vote_line_count(df) == 3
+
+    def test_single_non_zero_frame(self) -> None:
+        df = pd.DataFrame({"line_count": [0, 0, 2]})
+        assert vote_line_count(df) == 2
+
+    def test_all_zero_raises(self) -> None:
+        with pytest.raises(ValueError):
+            vote_line_count(pd.DataFrame({"line_count": [0, 0, 0]}))
+
+    def test_two_line_count_from_real_event(self) -> None:
+        df = _event_df()
+        lined = analyze_lines(df, "Away")
+        k = vote_line_count(lined)
+        assert 1 <= k <= 4
+
+
+# ── fix_player_assignments ────────────────────────────────────────────────────
+
+
+class TestFixPlayerAssignments:
+    def test_minority_flip_replaced_by_majority(self) -> None:
+        # Player 2 is line 2 for 4 frames, line 1 for 1 frame → locked to 2
+        df = pd.DataFrame({"Away_2_line": [2.0, 2.0, 1.0, 2.0, 2.0]})
+        result = fix_player_assignments(df, "Away")
+        assert (result["Away_2_line"] == 2.0).all()
+
+    def test_gk_line_zero_unchanged(self) -> None:
+        df = pd.DataFrame({
+            "Away_3_line": [0.0, 0.0, 0.0],
+            "Away_2_line": [2.0, 1.0, 2.0],
+        })
+        result = fix_player_assignments(df, "Away")
+        assert (result["Away_3_line"] == 0.0).all()
+
+    def test_nan_stays_nan(self) -> None:
+        df = pd.DataFrame({"Away_2_line": [2.0, float("nan"), 2.0, 2.0, float("nan")]})
+        result = fix_player_assignments(df, "Away")
+        assert pd.isna(result.loc[1, "Away_2_line"])
+        assert pd.isna(result.loc[4, "Away_2_line"])
+
+    def test_returns_copy_not_mutation(self) -> None:
+        df = pd.DataFrame({"Away_2_line": [2.0, 1.0, 2.0]})
+        original = df["Away_2_line"].tolist()
+        fix_player_assignments(df, "Away")
+        assert df["Away_2_line"].tolist() == original
+
+    def test_consistent_player_unchanged(self) -> None:
+        df = pd.DataFrame({"Away_2_line": [3.0, 3.0, 3.0, 3.0]})
+        result = fix_player_assignments(df, "Away")
+        assert (result["Away_2_line"] == 3.0).all()
+
+    def test_non_line_columns_unchanged(self) -> None:
+        df = pd.DataFrame({
+            "Away_2_x": [10.0, 11.0, 12.0],
+            "Away_2_line": [2.0, 1.0, 2.0],
+        })
+        result = fix_player_assignments(df, "Away")
+        assert result["Away_2_x"].tolist() == [10.0, 11.0, 12.0]
+
+    def test_each_player_has_single_line_after_fix(self) -> None:
+        df = _event_df()
+        lined = analyze_lines(df, "Away", force_n_lines=2)
+        fixed = fix_player_assignments(lined, "Away")
+        line_cols = [
+            c for c in fixed.columns
+            if c.startswith("Away_") and c.endswith("_line")
+        ]
+        for col in line_cols:
+            vals = fixed[col].dropna()
+            outfield = vals[vals > 0]
+            if not outfield.empty:
+                assert outfield.nunique() == 1, f"{col} still has multiple values"
+
+    def test_multi_frame_oscillation_resolved(self) -> None:
+        # Player oscillates 4 frames in line 1, then 4 frames in line 2, then 3 in 1
+        # Majority = line 1 (7 vs 4)
+        df = pd.DataFrame({
+            "Away_2_line": [1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 1.0, 1.0, 1.0]
+        })
+        result = fix_player_assignments(df, "Away")
+        assert (result["Away_2_line"] == 1.0).all()

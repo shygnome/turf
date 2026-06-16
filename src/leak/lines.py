@@ -9,14 +9,29 @@ from scipy.cluster.hierarchy import fcluster, linkage  # type: ignore[import-unt
 
 
 def find_goalkeeper(df: pd.DataFrame, team: str) -> str:
-    """Return player number of the goalkeeper (max abs-x position at first frame)."""
+    """Return player ID of the goalkeeper by majority vote across all frames.
+
+    For each frame the player with the highest abs(x) is nominated; the player
+    nominated most often across the clip is returned.  This is robust to
+    occasional tracklet swaps that would fool a single-frame heuristic.
+    """
     x_cols = [c for c in df.columns if c.startswith(team + "_") and c.endswith("_x")]
-    valid = df.iloc[0][x_cols].dropna()
-    if valid.empty:
-        raise ValueError(f"No {team} player positions in first frame")
-    gk_col: str = valid.abs().idxmax()
-    # Away_3_x -> rsplit("_x") -> "Away_3" -> rsplit("_", 1) -> "3"
-    return gk_col.rsplit("_x", 1)[0].rsplit("_", 1)[1]
+    if not x_cols:
+        raise ValueError(f"No {team} player positions found")
+
+    votes: dict[str, int] = {}
+    for _, row in df.iterrows():
+        valid = row[x_cols].dropna()
+        if valid.empty:
+            continue
+        gk_col = str(valid.abs().idxmax())
+        player_num = gk_col.rsplit("_x", 1)[0].rsplit("_", 1)[1]
+        votes[player_num] = votes.get(player_num, 0) + 1
+
+    if not votes:
+        raise ValueError(f"No {team} player positions in any frame")
+
+    return max(votes, key=lambda p: votes[p])
 
 
 def _calinski_harabasz(
@@ -194,8 +209,47 @@ def smooth_line_assignments(
     return result
 
 
+def fix_player_assignments(lines_df: pd.DataFrame, team: str) -> pd.DataFrame:
+    """Lock each outfield player to their majority line assignment across all frames.
+
+    After force_n_lines stabilises K, individual players may still oscillate between
+    adjacent lines as they move across cluster boundaries.  This replaces each
+    player's per-frame assignment with the line they occupy most often, making
+    the stored assignments fully stable across the clip.
+
+    GK assignments (line == 0) and NaN positions are preserved unchanged.
+    """
+    result = lines_df.copy()
+    line_cols = [
+        c
+        for c in lines_df.columns
+        if c.startswith(team + "_") and c.endswith("_line")
+    ]
+    for col in line_cols:
+        series = lines_df[col]
+        outfield_mask = series.notna() & (series > 0)
+        outfield = series[outfield_mask]
+        if outfield.empty:
+            continue
+        majority = float(int(outfield.mode()[0]))
+        result.loc[outfield_mask, col] = majority
+    return result
+
+
+def vote_line_count(lines_df: pd.DataFrame) -> int:
+    """Return the most common non-zero line count from an analyze_lines result."""
+    counts = lines_df["line_count"]
+    non_zero = counts[counts > 0]
+    if non_zero.empty:
+        raise ValueError("No non-zero line counts found in lines_df")
+    return int(non_zero.mode()[0])
+
+
 def analyze_lines(
-    df: pd.DataFrame, team: str, min_line_gap: float = 0.0
+    df: pd.DataFrame,
+    team: str,
+    min_line_gap: float = 0.0,
+    force_n_lines: int | None = None,
 ) -> pd.DataFrame:
     """
     Add unit line assignments to every frame in df.
@@ -229,7 +283,15 @@ def analyze_lines(
             if pd.notna(val):
                 x_pos[num] = float(val)
 
-        lines = detect_lines_frame(x_pos, min_line_gap=min_line_gap)
+        if force_n_lines is not None:
+            lines = detect_lines_frame(
+                x_pos,
+                min_line_gap=min_line_gap,
+                min_lines=force_n_lines,
+                max_lines=force_n_lines,
+            )
+        else:
+            lines = detect_lines_frame(x_pos, min_line_gap=min_line_gap)
         for num, line_num in lines.items():
             result.at[idx, f"{team}_{num}_line"] = float(line_num)
         result.at[idx, "line_count"] = len(set(lines.values())) if lines else 0
