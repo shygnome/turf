@@ -7,10 +7,19 @@ import pytest
 
 from leak.pass_label import (
     assign_zone,
+    classify_pass_direction,
+    compute_all_adjacent_hull_vertices,
     compute_conceptual_line_xs,
+    compute_direction_labels,
+    compute_location_hull_vertices,
+    compute_location_label,
     compute_pass_stats,
+    compute_team_hull_vertices,
     detect_attack_direction,
     detect_line_break,
+    find_line_crossing_frame,
+    get_conceptual_line_player_positions,
+    is_point_in_convex_hull,
     label_event,
 )
 
@@ -421,3 +430,763 @@ class TestComputePassStats:
         assert stats["n_labeled"] == 0
         assert stats["n_breaking"] == 0
         assert stats["lines_broken_dist"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 helper
+# ---------------------------------------------------------------------------
+
+
+def _make_lines_df_with_y(
+    gk_x: float,
+    gk_y: float,
+    line_player_xys: dict[int, list[tuple[float, float]]],
+    ball_xy: list[tuple[float, float]],
+    team: str = "Away",
+) -> pd.DataFrame:
+    """Build a lines.csv-shaped DataFrame with per-player y and per-frame ball."""
+    rows = []
+    for f_idx, (bx, by) in enumerate(ball_xy):
+        row: dict[str, object] = {
+            "frame": float(f_idx),
+            "Period": 1.0,
+            "Time [s]": float(f_idx) * 0.04,
+        }
+        row[f"{team}_0_x"] = gk_x
+        row[f"{team}_0_y"] = gk_y
+        row[f"{team}_0_line"] = 0.0
+        player_num = 1
+        for leak_line, xys in line_player_xys.items():
+            for x, y in xys:
+                row[f"{team}_{player_num}_x"] = x
+                row[f"{team}_{player_num}_y"] = y
+                row[f"{team}_{player_num}_line"] = float(leak_line)
+                player_num += 1
+        row["ball_x"] = bx
+        row["ball_y"] = by
+        row["line_count"] = float(len(line_player_xys))
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# get_conceptual_line_player_positions
+# ---------------------------------------------------------------------------
+
+
+class TestGetConceptualLinePlayerPositions:
+    def test_two_lines_attack_dir_plus_one(self) -> None:
+        df = _make_lines_df(gk_x=40.0, line_player_xs={1: [4.0, 6.0], 2: [12.0, 14.0]})
+        result = get_conceptual_line_player_positions(df.iloc[0], "Away", attack_dir=1)
+        assert set(result.keys()) == {1, 2}
+        xs_1 = sorted(x for x, y in result[1])
+        assert xs_1 == pytest.approx([4.0, 6.0])
+        xs_2 = sorted(x for x, y in result[2])
+        assert xs_2 == pytest.approx([12.0, 14.0])
+
+    def test_excludes_gk(self) -> None:
+        df = _make_lines_df(gk_x=40.0, line_player_xs={1: [4.0, 6.0], 2: [12.0, 14.0]})
+        result = get_conceptual_line_player_positions(df.iloc[0], "Away", attack_dir=1)
+        for positions in result.values():
+            assert all(x < 40.0 for x, y in positions)
+
+    def test_attack_dir_minus_one_reverses_conceptual_order(self) -> None:
+        # attack_dir=-1: L1=highest x (LEAK L2: -6,-8), L2=lowest x (LEAK L1: -20,-22)
+        df = _make_lines_df(
+            gk_x=-40.0,
+            line_player_xs={1: [-20.0, -22.0], 2: [-6.0, -8.0]},
+        )
+        result = get_conceptual_line_player_positions(df.iloc[0], "Away", attack_dir=-1)
+        xs_1 = [x for x, y in result[1]]
+        assert all(x > -10.0 for x in xs_1)
+        xs_2 = [x for x, y in result[2]]
+        assert all(x < -10.0 for x in xs_2)
+
+    def test_includes_y_positions(self) -> None:
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(4.0, -3.0), (6.0, 3.0)],
+                2: [(12.0, -2.0), (14.0, 2.0)],
+            },
+            ball_xy=[(0.0, 0.0)],
+        )
+        result = get_conceptual_line_player_positions(df.iloc[0], "Away", attack_dir=1)
+        ys_1 = sorted(y for x, y in result[1])
+        assert ys_1 == pytest.approx([-3.0, 3.0])
+
+
+# ---------------------------------------------------------------------------
+# find_line_crossing_frame
+# ---------------------------------------------------------------------------
+
+
+class TestFindLineCrossingFrame:
+    def _df(
+        self,
+        line_xys: dict[int, list[tuple[float, float]]],
+        ball_xs: list[float],
+        gk_x: float = 40.0,
+    ) -> pd.DataFrame:
+        return _make_lines_df_with_y(
+            gk_x=gk_x,
+            gk_y=0.0,
+            line_player_xys=line_xys,
+            ball_xy=[(x, 0.0) for x in ball_xs],
+        )
+
+    def test_crossing_at_frame_4(self) -> None:
+        # L1 mean_x=3.5; ball: 0,1,2,3,4 → crosses at frame 4 (4 >= 3.5)
+        df = self._df(
+            line_xys={1: [(3.5, -2.0), (3.5, 2.0)], 2: [(15.0, -2.0), (15.0, 2.0)]},
+            ball_xs=[0.0, 1.0, 2.0, 3.0, 4.0],
+        )
+        frame = find_line_crossing_frame(
+            df, "Away", attack_dir=1, conceptual_line_idx=1
+        )
+        assert frame == 4
+
+    def test_ball_starts_past_line_returns_frame_zero(self) -> None:
+        df = self._df(
+            line_xys={1: [(3.0, -2.0), (3.0, 2.0)]},
+            ball_xs=[10.0, 11.0, 12.0],
+        )
+        frame = find_line_crossing_frame(
+            df, "Away", attack_dir=1, conceptual_line_idx=1
+        )
+        assert frame == 0
+
+    def test_no_crossing_returns_last_frame(self) -> None:
+        # Ball stays at 0,1,2,3 — never reaches line at 3.5
+        df = self._df(
+            line_xys={1: [(3.5, -2.0), (3.5, 2.0)]},
+            ball_xs=[0.0, 1.0, 2.0, 3.0],
+        )
+        frame = find_line_crossing_frame(
+            df, "Away", attack_dir=1, conceptual_line_idx=1
+        )
+        assert frame == 3
+
+    def test_attack_dir_minus_one(self) -> None:
+        # attack_dir=-1, L1 conceptual mean_x=-5; ball: 0,-3,-6,-9
+        # Crosses when ball_x*-1 >= -5*-1=5 → -ball_x >= 5 → frame 2 (ball=-6)
+        df = self._df(
+            gk_x=-40.0,
+            line_xys={1: [(-5.0, -2.0), (-5.0, 2.0)]},
+            ball_xs=[0.0, -3.0, -6.0, -9.0],
+        )
+        frame = find_line_crossing_frame(
+            df, "Away", attack_dir=-1, conceptual_line_idx=1
+        )
+        assert frame == 2
+
+
+# ---------------------------------------------------------------------------
+# classify_pass_direction
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyPassDirection:
+    def test_within_y_range_is_through(self) -> None:
+        assert classify_pass_direction(ball_y=0.0, player_ys=[-5.0, 5.0]) == "Through"
+
+    def test_at_edges_is_through(self) -> None:
+        assert classify_pass_direction(ball_y=-5.0, player_ys=[-5.0, 5.0]) == "Through"
+        assert classify_pass_direction(ball_y=5.0, player_ys=[-5.0, 5.0]) == "Through"
+
+    def test_outside_y_range_is_around(self) -> None:
+        assert classify_pass_direction(ball_y=6.0, player_ys=[-5.0, 5.0]) == "Around"
+        assert classify_pass_direction(ball_y=-6.0, player_ys=[-5.0, 5.0]) == "Around"
+
+    def test_empty_players_is_around(self) -> None:
+        assert classify_pass_direction(ball_y=0.0, player_ys=[]) == "Around"
+
+    def test_single_player(self) -> None:
+        assert classify_pass_direction(ball_y=3.0, player_ys=[3.0]) == "Through"
+        assert classify_pass_direction(ball_y=4.0, player_ys=[3.0]) == "Around"
+
+
+# ---------------------------------------------------------------------------
+# is_point_in_convex_hull
+# ---------------------------------------------------------------------------
+
+
+class TestIsPointInConvexHull:
+    _square = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]
+
+    def test_center_is_inside(self) -> None:
+        assert is_point_in_convex_hull((2.0, 2.0), self._square) is True
+
+    def test_outside_is_false(self) -> None:
+        assert is_point_in_convex_hull((5.0, 5.0), self._square) is False
+
+    def test_fewer_than_3_points_returns_false(self) -> None:
+        assert is_point_in_convex_hull((1.0, 1.0), [(0.0, 0.0), (2.0, 2.0)]) is False
+
+    def test_empty_positions_returns_false(self) -> None:
+        assert is_point_in_convex_hull((1.0, 1.0), []) is False
+
+
+# ---------------------------------------------------------------------------
+# compute_direction_labels
+# ---------------------------------------------------------------------------
+
+
+class TestComputeDirectionLabels:
+    def test_through_when_ball_within_y_extent(self) -> None:
+        # L1 at x=5, players y=[-3,3]; ball crosses at y=0 → Through
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(5.0, -3.0), (5.0, 3.0)],
+                2: [(20.0, -3.0), (20.0, 3.0)],
+            },
+            ball_xy=[(0.0, 0.0), (6.0, 0.0)],
+        )
+        dirs = compute_direction_labels(df, "Away", attack_dir=1, lines_broken=[1])
+        assert dirs == ["Through"]
+
+    def test_around_when_ball_outside_y_extent(self) -> None:
+        # L1 at x=5, players y=[2,4]; ball crosses at y=0 → Around
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(5.0, 2.0), (5.0, 4.0)],
+                2: [(20.0, 2.0), (20.0, 4.0)],
+            },
+            ball_xy=[(0.0, 0.0), (6.0, 0.0)],
+        )
+        dirs = compute_direction_labels(df, "Away", attack_dir=1, lines_broken=[1])
+        assert dirs == ["Around"]
+
+    def test_two_broken_lines_mixed_directions(self) -> None:
+        # L1 at x=5, y=[-3,3]: ball y=0 → Through
+        # L2 at x=12, y=[4,8]: ball y=0 → Around
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(5.0, -3.0), (5.0, 3.0)],
+                2: [(12.0, 4.0), (12.0, 8.0)],
+            },
+            ball_xy=[(0.0, 0.0), (6.0, 0.0), (13.0, 0.0)],
+        )
+        result = compute_direction_labels(df, "Away", attack_dir=1, lines_broken=[1, 2])
+        assert result == ["Through", "Around"]
+
+    def test_empty_lines_broken_returns_empty(self) -> None:
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={1: [(5.0, 0.0), (5.0, 1.0)]},
+            ball_xy=[(0.0, 0.0)],
+        )
+        assert compute_direction_labels(df, "Away", attack_dir=1, lines_broken=[]) == []
+
+
+# ---------------------------------------------------------------------------
+# compute_location_label
+# ---------------------------------------------------------------------------
+
+
+class TestComputeLocationLabel:
+    def _two_line_df(
+        self,
+        l1_x: float,
+        l1_ys: list[float],
+        l2_x: float,
+        l2_ys: list[float],
+        ball_xy: list[tuple[float, float]],
+    ) -> pd.DataFrame:
+        return _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(l1_x, y) for y in l1_ys],
+                2: [(l2_x, y) for y in l2_ys],
+            },
+            ball_xy=ball_xy,
+        )
+
+    def test_inside_hull_returns_inside(self) -> None:
+        # Hull: L1 x=0 y=[-5,5], L2 x=10 y=[-5,5] → roughly x=[0,10] y=[-5,5]
+        # Ball ends at (5, 0) → Inside
+        df = self._two_line_df(
+            0.0, [-5.0, 5.0], 10.0, [-5.0, 5.0], [(0.0, 0.0), (5.0, 0.0)]
+        )
+        result = compute_location_label(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_ball_x=5.0,
+            end_ball_y=0.0,
+        )
+        assert result == "Inside"
+
+    def test_outside_hull_returns_outside(self) -> None:
+        df = self._two_line_df(
+            0.0, [-5.0, 5.0], 10.0, [-5.0, 5.0], [(0.0, 0.0), (5.0, 20.0)]
+        )
+        result = compute_location_label(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_ball_x=5.0,
+            end_ball_y=20.0,
+        )
+        assert result == "Outside"
+
+    def test_ball_before_all_lines_returns_outside(self) -> None:
+        # Ball ends before any hull (x=5 < L1 at x=10) → Outside
+        df = self._two_line_df(
+            10.0, [-5.0, 5.0], 20.0, [-5.0, 5.0], [(0.0, 0.0), (5.0, 0.0)]
+        )
+        result = compute_location_label(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_ball_x=5.0,
+            end_ball_y=0.0,
+        )
+        assert result == "Outside"
+
+    def test_ball_past_all_lines_returns_outside(self) -> None:
+        # Ball ends past all hulls (x=25 > L2 at x=10) → Outside
+        df = self._two_line_df(
+            5.0, [-5.0, 5.0], 10.0, [-5.0, 5.0], [(0.0, 0.0), (25.0, 0.0)]
+        )
+        result = compute_location_label(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_ball_x=25.0,
+            end_ball_y=0.0,
+        )
+        assert result == "Outside"
+
+    def test_single_line_returns_none(self) -> None:
+        # Only 1 outfield line → no adjacent pair can be formed
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={1: [(10.0, -5.0), (10.0, 5.0)]},
+            ball_xy=[(0.0, 0.0)],
+        )
+        result = compute_location_label(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_ball_x=5.0,
+            end_ball_y=0.0,
+        )
+        assert result is None
+
+    def test_inside_any_of_multiple_hulls_returns_inside(self) -> None:
+        # 3 lines: L1-L2 hull and L2-L3 hull.
+        # Ball in L2-L3 hull only → still "Inside" (option C: any hull)
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(0.0, -5.0), (0.0, 5.0)],
+                2: [(10.0, -5.0), (10.0, 5.0)],
+                3: [(20.0, -5.0), (20.0, 5.0)],
+            },
+            ball_xy=[(0.0, 0.0), (15.0, 0.0)],
+        )
+        result = compute_location_label(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_ball_x=15.0,
+            end_ball_y=0.0,
+        )
+        assert result == "Inside"
+
+
+# ---------------------------------------------------------------------------
+# label_event — Phase 2 labels
+# ---------------------------------------------------------------------------
+
+
+class TestLabelEventPhase2:
+    def _build_event_dir_with_y(
+        self,
+        tmp_path: Path,
+        gk_x: float,
+        line_xys: dict[int, list[tuple[float, float]]],
+        ball_xy: list[tuple[float, float]],
+    ) -> tuple[Path, str]:
+        team = "Away"
+        rows = []
+        for f_idx, (bx, by) in enumerate(ball_xy):
+            row: dict[str, object] = {
+                "frame": float(f_idx),
+                "Period": 1.0,
+                "Time [s]": float(f_idx) * 0.04,
+            }
+            row[f"{team}_0_x"] = gk_x
+            row[f"{team}_0_y"] = 0.0
+            row[f"{team}_0_line"] = 0.0
+            player_num = 1
+            for leak_line, xys in line_xys.items():
+                for x, y in xys:
+                    row[f"{team}_{player_num}_x"] = x
+                    row[f"{team}_{player_num}_y"] = y
+                    row[f"{team}_{player_num}_line"] = float(leak_line)
+                    player_num += 1
+            row["ball_x"] = bx
+            row["ball_y"] = by
+            row["line_count"] = float(len(line_xys))
+            rows.append(row)
+        df = pd.DataFrame(rows)
+        event_dir = tmp_path / "0"
+        event_dir.mkdir()
+        df.to_csv(event_dir / "lines.csv", index=False)
+        return event_dir, team
+
+    def test_line_breaking_has_direction_and_location(self, tmp_path: Path) -> None:
+        # Ball breaks line 1 (at x=3); players at y=[-3,3]; ball y=0 → Through
+        # Ball ends in L2-zone → Inside/Outside
+        event_dir, team = self._build_event_dir_with_y(
+            tmp_path,
+            gk_x=40.0,
+            line_xys={1: [(3.0, -3.0), (3.0, 3.0)], 2: [(15.0, -5.0), (15.0, 5.0)]},
+            ball_xy=[(0.0, 0.0), (5.0, 0.0)],
+        )
+        result = label_event(event_dir, team)
+        assert result["is_line_breaking"] is True
+        assert "direction_per_line" in result
+        assert "location_after_break" in result
+        assert isinstance(result["direction_per_line"], list)
+        assert len(result["direction_per_line"]) == result["lines_broken_count"]
+
+    def test_nonbreaking_has_empty_direction_and_none_location(
+        self, tmp_path: Path
+    ) -> None:
+        # Ball stays in L1-zone (lines at x=10 and x=20; ball goes 0→5)
+        event_dir, team = self._build_event_dir_with_y(
+            tmp_path,
+            gk_x=40.0,
+            line_xys={1: [(10.0, -3.0), (10.0, 3.0)], 2: [(20.0, -3.0), (20.0, 3.0)]},
+            ball_xy=[(0.0, 0.0), (5.0, 0.0)],
+        )
+        result = label_event(event_dir, team)
+        assert result["is_line_breaking"] is False
+        assert result["direction_per_line"] == []
+        assert result["location_after_break"] is None
+
+
+# ---------------------------------------------------------------------------
+# compute_location_hull_vertices
+# ---------------------------------------------------------------------------
+
+
+class TestComputeLocationHullVertices:
+    def _two_line_df(
+        self,
+        l1_xys: list[tuple[float, float]],
+        l2_xys: list[tuple[float, float]],
+        ball_xy: list[tuple[float, float]],
+    ) -> pd.DataFrame:
+        return _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={1: l1_xys, 2: l2_xys},
+            ball_xy=ball_xy,
+        )
+
+    def test_returns_list_of_tuples_for_valid_zone(self) -> None:
+        # Ball ends in L2-zone (between L1 at x=5 and L2 at x=15)
+        df = self._two_line_df(
+            l1_xys=[(5.0, -5.0), (5.0, 5.0)],
+            l2_xys=[(15.0, -5.0), (15.0, 5.0)],
+            ball_xy=[(0.0, 0.0), (10.0, 0.0)],
+        )
+        vertices = compute_location_hull_vertices(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_line_xs=[5.0, 15.0],
+            end_ball_x=10.0,
+        )
+        assert vertices is not None
+        assert isinstance(vertices, list)
+        assert len(vertices) >= 3
+        assert all(isinstance(v, tuple) and len(v) == 2 for v in vertices)
+
+    def test_vertices_are_from_pair_players(self) -> None:
+        # L1 players at x=0, y=[-5,5]; L2 players at x=10, y=[-5,5]
+        # All 4 corner points should appear as hull vertices
+        l1_xys = [(0.0, -5.0), (0.0, 5.0)]
+        l2_xys = [(10.0, -5.0), (10.0, 5.0)]
+        df = self._two_line_df(
+            l1_xys=l1_xys,
+            l2_xys=l2_xys,
+            ball_xy=[(0.0, 0.0), (5.0, 0.0)],
+        )
+        vertices = compute_location_hull_vertices(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_line_xs=[0.0, 10.0],
+            end_ball_x=5.0,
+        )
+        assert vertices is not None
+        all_player_xys = set(l1_xys + l2_xys)
+        vertex_set = {(round(x, 6), round(y, 6)) for x, y in vertices}
+        assert vertex_set == {(round(x, 6), round(y, 6)) for x, y in all_player_xys}
+
+    def test_l1_zone_returns_none(self) -> None:
+        # Ball ends before the first line → L1-zone
+        df = self._two_line_df(
+            l1_xys=[(10.0, -5.0), (10.0, 5.0)],
+            l2_xys=[(20.0, -5.0), (20.0, 5.0)],
+            ball_xy=[(0.0, 0.0), (5.0, 0.0)],
+        )
+        result = compute_location_hull_vertices(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_line_xs=[10.0, 20.0],
+            end_ball_x=5.0,
+        )
+        assert result is None
+
+    def test_danger_zone_returns_none(self) -> None:
+        # Ball ends past all lines → danger-zone
+        df = self._two_line_df(
+            l1_xys=[(5.0, -5.0), (5.0, 5.0)],
+            l2_xys=[(10.0, -5.0), (10.0, 5.0)],
+            ball_xy=[(0.0, 0.0), (25.0, 0.0)],
+        )
+        result = compute_location_hull_vertices(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_line_xs=[5.0, 10.0],
+            end_ball_x=25.0,
+        )
+        assert result is None
+
+    def test_insufficient_points_returns_none(self) -> None:
+        # Only 2 players total across the pair → cannot form convex hull
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(5.0, 0.0)],  # 1 player
+                2: [(15.0, 0.0)],  # 1 player  → total 2 < 3
+            },
+            ball_xy=[(0.0, 0.0), (10.0, 0.0)],
+        )
+        result = compute_location_hull_vertices(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_line_xs=[5.0, 15.0],
+            end_ball_x=10.0,
+        )
+        assert result is None
+
+    def test_three_line_scenario_uses_correct_pair(self) -> None:
+        # 3 conceptual lines; ball ends in L3-zone (between L2 and L3)
+        # Pair should be (L2, L3) players, not (L1, L2)
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(5.0, -3.0), (5.0, 3.0)],
+                2: [(15.0, -3.0), (15.0, 3.0)],
+                3: [(25.0, -3.0), (25.0, 3.0)],
+            },
+            ball_xy=[(0.0, 0.0), (20.0, 0.0)],
+        )
+        vertices = compute_location_hull_vertices(
+            lines_df=df,
+            defending_team="Away",
+            attack_dir=1,
+            end_line_xs=[5.0, 15.0, 25.0],
+            end_ball_x=20.0,
+        )
+        assert vertices is not None
+        xs = [x for x, y in vertices]
+        # All vertices should be from L2 (x=15) or L3 (x=25), not L1 (x=5)
+        assert all(x >= 14.9 for x in xs)
+
+
+# ---------------------------------------------------------------------------
+# compute_team_hull_vertices
+# ---------------------------------------------------------------------------
+
+
+class TestComputeTeamHullVertices:
+    def _three_line_df(
+        self, ball_xy: list[tuple[float, float]]
+    ) -> pd.DataFrame:
+        return _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(5.0, -3.0), (5.0, 3.0)],
+                2: [(15.0, -4.0), (15.0, 4.0)],
+                3: [(25.0, -5.0), (25.0, 5.0)],
+            },
+            ball_xy=ball_xy,
+        )
+
+    def test_three_lines_returns_two_hulls(self) -> None:
+        df = self._three_line_df([(0.0, 0.0)])
+        hulls = compute_team_hull_vertices(df, "Away", attack_dir=1)
+        assert len(hulls) == 2
+
+    def test_each_hull_is_list_of_tuples(self) -> None:
+        df = self._three_line_df([(0.0, 0.0)])
+        hulls = compute_team_hull_vertices(df, "Away", attack_dir=1)
+        for hull in hulls:
+            assert isinstance(hull, list)
+            assert len(hull) >= 3
+            assert all(isinstance(v, tuple) and len(v) == 2 for v in hull)
+
+    def test_hulls_span_adjacent_pairs_only(self) -> None:
+        # L1-L2 hull spans x=[5,15], L2-L3 hull spans x=[15,25]; no hull spans all 3
+        df = self._three_line_df([(0.0, 0.0)])
+        hulls = compute_team_hull_vertices(df, "Away", attack_dir=1)
+        for hull in hulls:
+            xs = [x for x, y in hull]
+            assert not (min(xs) <= 5.5 and max(xs) >= 24.5)
+
+    def test_excludes_gk_from_all_hulls(self) -> None:
+        df = self._three_line_df([(0.0, 0.0)])
+        hulls = compute_team_hull_vertices(df, "Away", attack_dir=1)
+        for hull in hulls:
+            assert all(x < 40.0 for x, y in hull)
+
+    def test_returns_empty_for_insufficient_pair_players(self) -> None:
+        # 1 player per line → pair has 2 < 3 → no valid hull
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={1: [(5.0, 0.0)], 2: [(15.0, 0.0)]},
+            ball_xy=[(0.0, 0.0)],
+        )
+        result = compute_team_hull_vertices(df, "Away", attack_dir=1)
+        assert result == []
+
+    def test_uses_last_frame(self) -> None:
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(5.0, -3.0), (5.0, 3.0)],
+                2: [(20.0, -3.0), (20.0, 3.0)],
+            },
+            ball_xy=[(0.0, 0.0), (0.0, 0.0)],
+        )
+        df.loc[1, "Away_1_x"] = 7.0
+        df.loc[1, "Away_2_x"] = 7.0
+        df.loc[1, "Away_3_x"] = 22.0
+        df.loc[1, "Away_4_x"] = 22.0
+        hulls = compute_team_hull_vertices(df, "Away", attack_dir=1)
+        assert len(hulls) == 1
+        xs = [x for x, y in hulls[0]]
+        assert min(xs) == pytest.approx(7.0)
+        assert max(xs) == pytest.approx(22.0)
+
+
+# ---------------------------------------------------------------------------
+# compute_all_adjacent_hull_vertices
+# ---------------------------------------------------------------------------
+
+
+class TestComputeAllAdjacentHullVertices:
+    def _three_line_df(self) -> pd.DataFrame:
+        return _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(5.0, -3.0), (5.0, 3.0)],
+                2: [(15.0, -4.0), (15.0, 4.0)],
+                3: [(25.0, -5.0), (25.0, 5.0)],
+            },
+            ball_xy=[(0.0, 0.0)],
+        )
+
+    def test_three_lines_returns_two_hulls(self) -> None:
+        hulls = compute_all_adjacent_hull_vertices(
+            self._three_line_df(), "Away", attack_dir=1
+        )
+        assert len(hulls) == 2
+
+    def test_two_lines_returns_one_hull(self) -> None:
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(5.0, -3.0), (5.0, 3.0)],
+                2: [(15.0, -3.0), (15.0, 3.0)],
+            },
+            ball_xy=[(0.0, 0.0)],
+        )
+        hulls = compute_all_adjacent_hull_vertices(df, "Away", attack_dir=1)
+        assert len(hulls) == 1
+
+    def test_first_hull_spans_l1_l2_players(self) -> None:
+        hulls = compute_all_adjacent_hull_vertices(
+            self._three_line_df(), "Away", attack_dir=1
+        )
+        xs = [x for x, y in hulls[0]]
+        assert min(xs) == pytest.approx(5.0)
+        assert max(xs) == pytest.approx(15.0)
+
+    def test_second_hull_spans_l2_l3_players(self) -> None:
+        hulls = compute_all_adjacent_hull_vertices(
+            self._three_line_df(), "Away", attack_dir=1
+        )
+        xs = [x for x, y in hulls[1]]
+        assert min(xs) == pytest.approx(15.0)
+        assert max(xs) == pytest.approx(25.0)
+
+    def test_insufficient_pair_players_skipped(self) -> None:
+        # 1 player per line → pair has 2 < 3 → empty
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={1: [(5.0, 0.0)], 2: [(15.0, 0.0)]},
+            ball_xy=[(0.0, 0.0)],
+        )
+        hulls = compute_all_adjacent_hull_vertices(df, "Away", attack_dir=1)
+        assert hulls == []
+
+    def test_one_line_returns_empty(self) -> None:
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={1: [(5.0, -3.0), (5.0, 3.0)]},
+            ball_xy=[(0.0, 0.0)],
+        )
+        hulls = compute_all_adjacent_hull_vertices(df, "Away", attack_dir=1)
+        assert hulls == []
+
+    def test_uses_last_frame(self) -> None:
+        df = _make_lines_df_with_y(
+            gk_x=40.0,
+            gk_y=0.0,
+            line_player_xys={
+                1: [(5.0, -3.0), (5.0, 3.0)],
+                2: [(15.0, -3.0), (15.0, 3.0)],
+            },
+            ball_xy=[(0.0, 0.0), (0.0, 0.0)],
+        )
+        df.loc[1, "Away_1_x"] = 7.0
+        df.loc[1, "Away_2_x"] = 7.0
+        df.loc[1, "Away_3_x"] = 17.0
+        df.loc[1, "Away_4_x"] = 17.0
+        hulls = compute_all_adjacent_hull_vertices(df, "Away", attack_dir=1)
+        assert len(hulls) == 1
+        xs = [x for x, y in hulls[0]]
+        assert min(xs) == pytest.approx(7.0)
+        assert max(xs) == pytest.approx(17.0)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
 
@@ -149,6 +150,239 @@ def detect_line_break(
     }
 
 
+def get_conceptual_line_player_positions(
+    frame_row: pd.Series[Any],
+    defending_team: str,
+    attack_dir: int,
+) -> dict[int, list[tuple[float, float]]]:
+    """Return {conceptual_line_idx (1-based) -> [(x, y), ...]} for a single frame row.
+
+    Conceptual ordering matches compute_conceptual_line_xs: L1 = most advanced press.
+    GK (line=0) is excluded.
+    """
+    line_xy: dict[int, list[tuple[float, float]]] = {}
+    line_cols = [
+        c
+        for c in frame_row.index
+        if c.startswith(defending_team + "_") and c.endswith("_line")
+    ]
+    for col in line_cols:
+        line_val = frame_row[col]
+        if pd.isna(line_val) or int(line_val) == 0:
+            continue
+        leak_line = int(line_val)
+        player_id = col[: -len("_line")].rsplit("_", 1)[1]
+        x_col = f"{defending_team}_{player_id}_x"
+        y_col = f"{defending_team}_{player_id}_y"
+        if x_col not in frame_row.index or y_col not in frame_row.index:
+            continue
+        x_val = frame_row[x_col]
+        y_val = frame_row[y_col]
+        if pd.isna(x_val) or pd.isna(y_val):
+            continue
+        line_xy.setdefault(leak_line, []).append((float(x_val), float(y_val)))
+
+    if not line_xy:
+        return {}
+
+    leak_line_means = {k: sum(x for x, y in v) / len(v) for k, v in line_xy.items()}
+    sorted_leaks = sorted(
+        leak_line_means.keys(), key=lambda k: leak_line_means[k] * attack_dir
+    )
+    return {i + 1: line_xy[leak] for i, leak in enumerate(sorted_leaks)}
+
+
+def find_line_crossing_frame(
+    lines_df: pd.DataFrame,
+    defending_team: str,
+    attack_dir: int,
+    conceptual_line_idx: int,
+) -> int:
+    """Return the first frame index where ball_x crosses conceptual line idx's mean x.
+
+    If the ball starts already past the line, returns 0.
+    If the ball never crosses the line, returns the last frame index.
+    """
+    for i, (_, row) in enumerate(lines_df.iterrows()):
+        positions = get_conceptual_line_player_positions(
+            row, defending_team, attack_dir
+        )
+        if conceptual_line_idx not in positions:
+            continue
+        line_xs = [x for x, y in positions[conceptual_line_idx]]
+        if not line_xs:
+            continue
+        line_mean_x = sum(line_xs) / len(line_xs)
+        ball_x = float(row["ball_x"])
+        if ball_x * attack_dir >= line_mean_x * attack_dir:
+            return i
+    return len(lines_df) - 1
+
+
+def classify_pass_direction(ball_y: float, player_ys: list[float]) -> str:
+    """Return "Through" if ball_y is within the y-extent of player_ys, else "Around"."""
+    if not player_ys:
+        return "Around"
+    return "Through" if min(player_ys) <= ball_y <= max(player_ys) else "Around"
+
+
+def is_point_in_convex_hull(
+    point: tuple[float, float],
+    positions: list[tuple[float, float]],
+) -> bool:
+    """Return True if point is inside or on the convex hull of positions.
+
+    Requires at least 3 positions. Returns False for degenerate inputs.
+    """
+    if len(positions) < 3:
+        return False
+    from scipy.spatial import Delaunay  # type: ignore[import-untyped]
+
+    try:
+        hull = Delaunay(np.array(positions, dtype=np.float64))
+        return bool(hull.find_simplex(np.array(point, dtype=np.float64)) >= 0)
+    except Exception:
+        return False
+
+
+def compute_direction_labels(
+    lines_df: pd.DataFrame,
+    defending_team: str,
+    attack_dir: int,
+    lines_broken: list[int],
+) -> list[str]:
+    """Return "Through" or "Around" for each broken conceptual line."""
+    result: list[str] = []
+    for line_idx in lines_broken:
+        frame_i = find_line_crossing_frame(
+            lines_df, defending_team, attack_dir, line_idx
+        )
+        row = lines_df.iloc[frame_i]
+        positions = get_conceptual_line_player_positions(
+            row, defending_team, attack_dir
+        )
+        player_ys = [y for x, y in positions.get(line_idx, [])]
+        ball_y = float(row["ball_y"])
+        result.append(classify_pass_direction(ball_y, player_ys))
+    return result
+
+
+def compute_all_adjacent_hull_vertices(
+    lines_df: pd.DataFrame,
+    defending_team: str,
+    attack_dir: int,
+) -> list[list[tuple[float, float]]]:
+    """Return convex hull vertices for each adjacent conceptual line pair.
+
+    For K conceptual lines returns up to K-1 hulls: (L1,L2), (L2,L3), ...
+    Pairs with fewer than 3 combined players are skipped.
+    """
+    from scipy.spatial import ConvexHull
+
+    last_row = lines_df.iloc[-1]
+    positions = get_conceptual_line_player_positions(
+        last_row, defending_team, attack_dir
+    )
+    n_lines = max(positions.keys(), default=0)
+    hulls: list[list[tuple[float, float]]] = []
+    for i in range(1, n_lines):
+        pair: list[tuple[float, float]] = list(positions.get(i, [])) + list(
+            positions.get(i + 1, [])
+        )
+        if len(pair) < 3:
+            continue
+        try:
+            pts = np.array(pair, dtype=np.float64)
+            hull = ConvexHull(pts)
+            hulls.append([(float(pts[j, 0]), float(pts[j, 1])) for j in hull.vertices])
+        except Exception:
+            pass
+    return hulls
+
+
+def compute_location_label(
+    lines_df: pd.DataFrame,
+    defending_team: str,
+    attack_dir: int,
+    end_ball_x: float,
+    end_ball_y: float,
+) -> str | None:
+    """Return "Inside" if ball end position falls inside any adjacent-pair convex hull.
+
+    Returns None when fewer than 2 conceptual lines exist (no pair can be formed).
+    """
+    last_row = lines_df.iloc[-1]
+    positions = get_conceptual_line_player_positions(
+        last_row, defending_team, attack_dir
+    )
+    n_lines = max(positions.keys(), default=0)
+    if n_lines < 2:
+        return None
+
+    endpoint = (end_ball_x, end_ball_y)
+    for i in range(1, n_lines):
+        pair: list[tuple[float, float]] = list(positions.get(i, [])) + list(
+            positions.get(i + 1, [])
+        )
+        if is_point_in_convex_hull(endpoint, pair):
+            return "Inside"
+    return "Outside"
+
+
+def compute_team_hull_vertices(
+    lines_df: pd.DataFrame,
+    defending_team: str,
+    attack_dir: int,
+) -> list[list[tuple[float, float]]]:
+    """Return convex hull vertices for each adjacent conceptual line pair.
+
+    Returns K-1 hulls for K lines: (L1,L2), (L2,L3), ...
+    Returns an empty list when no valid hull can be formed.
+    """
+    return compute_all_adjacent_hull_vertices(lines_df, defending_team, attack_dir)
+
+
+def compute_location_hull_vertices(
+    lines_df: pd.DataFrame,
+    defending_team: str,
+    attack_dir: int,
+    end_line_xs: list[float],
+    end_ball_x: float,
+) -> list[tuple[float, float]] | None:
+    """Return convex hull polygon vertices for the adjacent line pair at the end zone.
+
+    Same zone selection as compute_location_label. Returns None for L1-zone,
+    danger-zone, or when fewer than 3 players form the pair.
+    """
+    end_zone = assign_zone(end_ball_x, end_line_xs, attack_dir)
+    if end_zone == "L1-zone" or end_zone == "danger-zone":
+        return None
+
+    zone_idx = _zone_index(end_zone, len(end_line_xs))
+    line_a_idx = zone_idx
+    line_b_idx = zone_idx + 1
+
+    last_row = lines_df.iloc[-1]
+    positions = get_conceptual_line_player_positions(
+        last_row, defending_team, attack_dir
+    )
+    pair_positions: list[tuple[float, float]] = []
+    pair_positions.extend(positions.get(line_a_idx, []))
+    pair_positions.extend(positions.get(line_b_idx, []))
+
+    if len(pair_positions) < 3:
+        return None
+
+    from scipy.spatial import ConvexHull
+
+    try:
+        pts = np.array(pair_positions, dtype=np.float64)
+        hull = ConvexHull(pts)
+        return [(float(pts[i, 0]), float(pts[i, 1])) for i in hull.vertices]
+    except Exception:
+        return None
+
+
 def label_event(event_dir: Path, defending_team: str) -> dict[str, Any]:
     """
     Compute line-break labels for a single pass event.
@@ -171,10 +405,24 @@ def label_event(event_dir: Path, defending_team: str) -> dict[str, Any]:
 
     start_ball_x = float(first_row["ball_x"])
     end_ball_x = float(last_row["ball_x"])
+    end_ball_y = float(last_row["ball_y"])
 
-    return detect_line_break(
+    result = detect_line_break(
         start_ball_x, end_ball_x, start_line_xs, end_line_xs, attack_dir
     )
+
+    if result["is_line_breaking"]:
+        result["direction_per_line"] = compute_direction_labels(
+            lines_df, defending_team, attack_dir, result["lines_broken"]
+        )
+        result["location_after_break"] = compute_location_label(
+            lines_df, defending_team, attack_dir, end_ball_x, end_ball_y
+        )
+    else:
+        result["direction_per_line"] = []
+        result["location_after_break"] = None
+
+    return result
 
 
 def label_all_passes(
@@ -202,28 +450,23 @@ def label_all_passes(
 
         event_dir = pass_dir / str(event_idx)
         lines_path = event_dir / "lines.csv"
+        _skip_row: dict[str, Any] = {
+            "event_idx": event_idx,
+            "is_line_breaking": None,
+            "lines_broken_count": None,
+            "lines_broken": None,
+            "direction_per_line": None,
+            "location_after_break": None,
+        }
+
         if not lines_path.exists():
-            label_rows.append(
-                {
-                    "event_idx": event_idx,
-                    "is_line_breaking": None,
-                    "lines_broken_count": None,
-                    "lines_broken": None,
-                }
-            )
+            label_rows.append(_skip_row)
             continue
 
         try:
             labels = label_event(event_dir, defending_team)
         except (ValueError, KeyError):
-            label_rows.append(
-                {
-                    "event_idx": event_idx,
-                    "is_line_breaking": None,
-                    "lines_broken_count": None,
-                    "lines_broken": None,
-                }
-            )
+            label_rows.append(_skip_row)
             continue
 
         label_rows.append(
@@ -232,6 +475,8 @@ def label_all_passes(
                 "is_line_breaking": labels["is_line_breaking"],
                 "lines_broken_count": labels["lines_broken_count"],
                 "lines_broken": str(labels["lines_broken"]),
+                "direction_per_line": str(labels["direction_per_line"]),
+                "location_after_break": labels["location_after_break"],
             }
         )
 
