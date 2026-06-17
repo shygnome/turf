@@ -1,6 +1,7 @@
 import typer
 
 from . import __version__
+from . import analyze_features as _analyze_features
 from . import analyze_leak as _analyze_leak
 from . import dataset as _dataset
 from . import event as _event
@@ -16,6 +17,7 @@ app.add_typer(_dataset.app, name="dataset")
 app.add_typer(_match.app, name="match")
 app.add_typer(_event.app, name="event")
 app.add_typer(_analyze_leak.app, name="analyze")
+_analyze_leak.app.add_typer(_analyze_features.app, name="features")
 _dataset.app.command("prepare")(_prepare_cmd)
 
 
