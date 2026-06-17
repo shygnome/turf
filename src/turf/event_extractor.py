@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -67,6 +68,22 @@ class EventExtractor:
     ) -> list[EventClip]:
         mask = match_data.events["Type"].str.lower() == label.lower()
         matching = match_data.events[mask].reset_index(drop=True)
+
+        covered_periods = set(
+            match_data.home_tracking[_PERIOD_COL].unique()
+        ) & set(match_data.away_tracking[_PERIOD_COL].unique())
+        missing_periods = sorted(set(matching[_PERIOD_COL].unique()) - covered_periods)
+        if missing_periods:
+            n_skipped = int(matching[_PERIOD_COL].isin(missing_periods).sum())
+            warnings.warn(
+                f"Periods {missing_periods} have events but no tracking data — "
+                f"{n_skipped} event(s) skipped.",
+                UserWarning,
+                stacklevel=2,
+            )
+            matching = matching[
+                matching[_PERIOD_COL].isin(covered_periods)
+            ].reset_index(drop=True)
 
         inferred: dict[int, dict[str, object]] = {}
         if infer_endpoints and label.lower() in _INFER_LABELS:

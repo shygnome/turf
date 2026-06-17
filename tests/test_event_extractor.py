@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 import pytest
 
@@ -168,7 +170,7 @@ def test_extract_metadata_fields(match_data: MatchData) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_extract_raises_on_out_of_range_frames() -> None:
+def test_extract_warns_and_skips_events_with_no_tracking_for_period() -> None:
     df = pd.DataFrame(
         {
             "Team": ["Home"],
@@ -187,7 +189,7 @@ def test_extract_raises_on_out_of_range_frames() -> None:
             "End Y": [1.0],
         }
     )
-    # Tracking only has period 2; event is period 1 → no frames found
+    # Tracking only has period 2; event is period 1 → skip with warning
     tracking = pd.DataFrame(
         {
             "Period": [2] * 10,
@@ -201,8 +203,9 @@ def test_extract_raises_on_out_of_range_frames() -> None:
         home_tracking=tracking,
         away_tracking=tracking.rename(columns={"Home_1_x": "Away_1_x"}),
     )
-    with pytest.raises(ValueError, match="No tracking frames found"):
-        EventExtractor().extract(data, "pass")
+    with pytest.warns(UserWarning, match="Periods \\[1\\]"):
+        clips = EventExtractor().extract(data, "pass")
+    assert clips == []
 
 
 # ---------------------------------------------------------------------------
@@ -393,6 +396,115 @@ def test_extract_non_pass_label_has_null_inferred_columns(
     clips = EventExtractor().extract(match_data, "other")
     assert clips[0].metadata["end_x"] == pytest.approx(-4.0)
     assert clips[0].metadata["inferred_end_x"] is None
+
+
+# ---------------------------------------------------------------------------
+# EventExtractor.extract — per-period tracking coverage
+# ---------------------------------------------------------------------------
+
+
+def _make_tracking_with_periods(periods: list[int]) -> pd.DataFrame:
+    rows = []
+    t = 0.0
+    for p in periods:
+        for _ in range(5):
+            rows.append({"Period": p, "Time [s]": t, "Home_1_x": t})
+            t += 1.0
+    return pd.DataFrame(rows)
+
+
+def test_extract_skips_uncovered_period_keeps_covered_events() -> None:
+    """Events in periods 1 and 3; tracking covers only period 1.
+    Period-3 events are skipped; period-1 clips are returned."""
+    tracking = _make_tracking_with_periods([1])
+    away = tracking.rename(columns={"Home_1_x": "Away_1_x"})
+    df = pd.DataFrame(
+        {
+            "Team": ["Home", "Home", "Away", "Away"],
+            "Type": ["pass", "pass", "pass", "pass"],
+            "Subtype": ["success"] * 4,
+            "Period": [1, 1, 3, 3],
+            "Start Frame": [0, 1, 0, 1],
+            "Start Time [s]": [0.0, 1.0, 0.0, 1.0],
+            "End Frame": [1, 2, 1, 2],
+            "End Time [s]": [1.0, 2.0, 1.0, 2.0],
+            "From": ["Alice"] * 4,
+            "To": ["Bob"] * 4,
+            "Start X": [0.0] * 4,
+            "Start Y": [0.0] * 4,
+            "End X": [1.0] * 4,
+            "End Y": [1.0] * 4,
+        }
+    )
+    data = MatchData(
+        match_id="99", events=df, home_tracking=tracking, away_tracking=away
+    )
+    with pytest.warns(UserWarning, match="Periods \\[3\\].*2 event"):
+        clips = EventExtractor().extract(data, "pass", infer_endpoints=False)
+    assert len(clips) == 2
+    assert all(c.metadata["period"] == 1 for c in clips)
+
+
+def test_extract_event_idx_sequential_after_period_skip() -> None:
+    """event_idx in returned clips must be 0-based and sequential
+    even when earlier events were dropped due to missing tracking."""
+    tracking = _make_tracking_with_periods([1])
+    away = tracking.rename(columns={"Home_1_x": "Away_1_x"})
+    df = pd.DataFrame(
+        {
+            "Team": ["Home", "Home", "Home"],
+            "Type": ["pass", "pass", "pass"],
+            "Subtype": ["success"] * 3,
+            "Period": [3, 1, 1],  # period 3 first → skipped
+            "Start Frame": [0, 1, 2],
+            "Start Time [s]": [0.0, 1.0, 2.0],
+            "End Frame": [1, 2, 3],
+            "End Time [s]": [1.0, 2.0, 3.0],
+            "From": ["Alice"] * 3,
+            "To": ["Bob"] * 3,
+            "Start X": [0.0] * 3,
+            "Start Y": [0.0] * 3,
+            "End X": [1.0] * 3,
+            "End Y": [1.0] * 3,
+        }
+    )
+    data = MatchData(
+        match_id="99", events=df, home_tracking=tracking, away_tracking=away
+    )
+    with pytest.warns(UserWarning):
+        clips = EventExtractor().extract(data, "pass", infer_endpoints=False)
+    assert [c.event_idx for c in clips] == [0, 1]
+
+
+def test_extract_no_warning_when_all_periods_covered() -> None:
+    """No warning when tracking covers every period present in events."""
+    tracking = _make_tracking_with_periods([1, 2, 3, 4])
+    away = tracking.rename(columns={"Home_1_x": "Away_1_x"})
+    df = pd.DataFrame(
+        {
+            "Team": ["Home"] * 4,
+            "Type": ["pass"] * 4,
+            "Subtype": ["success"] * 4,
+            "Period": [1, 2, 3, 4],
+            "Start Frame": [0, 5, 10, 15],
+            "Start Time [s]": [0.0, 5.0, 10.0, 15.0],
+            "End Frame": [1, 6, 11, 16],
+            "End Time [s]": [1.0, 6.0, 11.0, 16.0],
+            "From": ["Alice"] * 4,
+            "To": ["Bob"] * 4,
+            "Start X": [0.0] * 4,
+            "Start Y": [0.0] * 4,
+            "End X": [1.0] * 4,
+            "End Y": [1.0] * 4,
+        }
+    )
+    data = MatchData(
+        match_id="99", events=df, home_tracking=tracking, away_tracking=away
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        clips = EventExtractor().extract(data, "pass", infer_endpoints=False)
+    assert len(clips) == 4
 
 
 def test_extract_cross_infers_endpoints(
