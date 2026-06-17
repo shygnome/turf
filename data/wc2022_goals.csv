@@ -1,0 +1,251 @@
+# WC 2022 goals — one row per goal
+# scoring_team : "Home" or "Away"
+# period       : 1, 2, 3 (ET first half), 4 (ET second half)
+# minute       : broadcast minute — P1: 1-45, P2: 46-90, ET1: 91-105, ET2: 106-120
+# added_time   : stoppage-time minutes (0 for regular time)
+# Own goals    : attribute to the team that benefits — i.e. use the team that DIDN'T touch it last
+#
+# Example: Germany 1-2 Japan (3821)
+#   Gundogan pen 33'  →  3821,Home,1,33,0
+#   Doan 83'          →  3821,Away,2,83,0
+#   Asano 89'+7       →  3821,Away,2,89,7
+#
+# ── Match reference (fill goals below, one row per goal) ─────────────────────
+# match_id : home_team vs away_team (date)
+# 3814 : Qatar vs Ecuador (2022-11-20)
+# 3813 : England vs Iran (2022-11-21)
+# 3812 : Senegal vs Netherlands (2022-11-21)
+# 3815 : United States vs Wales (2022-11-21)
+# 3816 : Argentina vs Saudi Arabia (2022-11-22)
+# 3817 : Denmark vs Tunisia (2022-11-22)
+# 3818 : Mexico vs Poland (2022-11-22)
+# 3819 : France vs Australia (2022-11-22)
+# 3820 : Morocco vs Croatia (2022-11-23)
+# 3821 : Germany vs Japan (2022-11-23)
+# 3822 : Spain vs Costa Rica (2022-11-23)
+# 3823 : Belgium vs Canada (2022-11-23)
+# 3824 : Switzerland vs Cameroon (2022-11-24)
+# 3825 : Uruguay vs South Korea (2022-11-24)
+# 3826 : Portugal vs Ghana (2022-11-24)
+# 3827 : Brazil vs Serbia (2022-11-24)
+# 3828 : Wales vs Iran (2022-11-25)
+# 3829 : Qatar vs Senegal (2022-11-25)
+# 3830 : Netherlands vs Ecuador (2022-11-25)
+# 3831 : England vs United States (2022-11-25)
+# 3832 : Tunisia vs Australia (2022-11-26)
+# 3833 : Poland vs Saudi Arabia (2022-11-26)
+# 3834 : France vs Denmark (2022-11-26)
+# 3835 : Argentina vs Mexico (2022-11-26)
+# 3836 : Japan vs Costa Rica (2022-11-27)
+# 3837 : Belgium vs Morocco (2022-11-27)
+# 3838 : Croatia vs Canada (2022-11-27)
+# 3839 : Spain vs Germany (2022-11-27)
+# 3840 : Cameroon vs Serbia (2022-11-28)
+# 3841 : South Korea vs Ghana (2022-11-28)
+# 3842 : Brazil vs Switzerland (2022-11-28)
+# 3843 : Portugal vs Uruguay (2022-11-28)
+# 3844 : Ecuador vs Senegal (2022-11-29)
+# 3845 : Netherlands vs Qatar (2022-11-29)
+# 3846 : Wales vs England (2022-11-29)
+# 3847 : Iran vs United States (2022-11-29)
+# 3848 : Australia vs Denmark (2022-11-30)
+# 3849 : Tunisia vs France (2022-11-30)
+# 3850 : Poland vs Argentina (2022-11-30)
+# 3851 : Saudi Arabia vs Mexico (2022-11-30)
+# 3852 : Croatia vs Belgium (2022-12-01)
+# 3853 : Canada vs Morocco (2022-12-01)
+# 3854 : Japan vs Spain (2022-12-01)
+# 3855 : Costa Rica vs Germany (2022-12-01)
+# 3856 : Ghana vs Uruguay (2022-12-02)
+# 3857 : South Korea vs Portugal (2022-12-02)
+# 3858 : Serbia vs Switzerland (2022-12-02)
+# 3859 : Cameroon vs Brazil (2022-12-02)
+# 10502 : Netherlands vs United States (2022-12-03)
+# 10503 : Argentina vs Australia (2022-12-03)
+# 10504 : France vs Poland (2022-12-04)
+# 10505 : England vs Senegal (2022-12-04)
+# 10506 : Japan vs Croatia (2022-12-05)
+# 10507 : Brazil vs South Korea (2022-12-05)
+# 10508 : Morocco vs Spain (2022-12-06)
+# 10509 : Portugal vs Switzerland (2022-12-06)
+# 10510 : Croatia vs Brazil (2022-12-09)
+# 10511 : Netherlands vs Argentina (2022-12-09)
+# 10512 : Morocco vs Portugal (2022-12-10)
+# 10513 : England vs France (2022-12-10)
+# 10514 : Argentina vs Croatia (2022-12-13)
+# 10515 : France vs Morocco (2022-12-14)
+# 10516 : Croatia vs Morocco (2022-12-17)
+# 10517 : Argentina vs France (2022-12-18)
+match_id,scoring_team,period,minute,added_time
+3812,Away,2,84,0
+3812,Away,2,90,9
+3813,Home,1,35,0
+3813,Home,1,43,0
+3813,Home,1,45,1
+3813,Home,2,62,0
+3813,Away,2,65,0
+3813,Home,2,71,0
+3813,Home,2,89,0
+3813,Away,2,90,13
+3814,Away,1,16,0
+3814,Away,1,31,0
+3815,Home,1,36,0
+3815,Away,2,82,0
+3816,Home,1,10,0
+3816,Away,2,48,0
+3816,Away,2,53,0
+3819,Away,1,9,0
+3819,Home,1,27,0
+3819,Home,1,32,0
+3819,Home,2,68,0
+3819,Home,2,71,0
+3821,Home,1,33,0
+3821,Away,2,75,0
+3821,Away,2,83,0
+3822,Home,1,11,0
+3822,Home,1,21,0
+3822,Home,1,31,0
+3822,Home,2,54,0
+3822,Home,2,75,0
+3822,Home,2,90,0
+3822,Home,2,90,3
+3823,Home,1,44,0
+3824,Home,2,48,0
+3826,Home,2,65,0
+3826,Away,2,73,0
+3826,Home,2,78,0
+3826,Home,2,80,0
+3826,Away,2,89,0
+3827,Home,2,62,0
+3827,Home,2,73,0
+3828,Away,2,90,9
+3828,Away,2,90,11
+3829,Away,1,41,0
+3829,Away,2,48,0
+3829,Home,2,78,0
+3829,Away,2,84,0
+3830,Home,1,6,0
+3830,Away,2,49,0
+3832,Away,1,23,0
+3833,Home,1,39,0
+3833,Home,2,82,0
+3834,Home,2,61,0
+3834,Away,2,68,0
+3834,Home,2,86,0
+3835,Home,2,64,0
+3835,Home,2,87,0
+3836,Away,2,81,0
+3837,Away,2,73,0
+3837,Away,2,90,2
+3838,Away,1,2,0
+3838,Home,1,36,0
+3838,Home,1,44,0
+3838,Home,2,70,0
+3838,Home,2,90,4
+3839,Home,2,62,0
+3839,Away,2,83,0
+3840,Home,1,28,0
+3840,Away,1,45,1
+3840,Away,1,45,3
+3840,Away,2,53,0
+3840,Home,2,63,0
+3840,Home,2,66,0
+3841,Away,1,24,0
+3841,Away,1,34,0
+3841,Home,2,58,0
+3841,Home,2,61,0
+3841,Away,2,68,0
+3842,Home,2,83,0
+3843,Home,2,54,0
+3843,Home,2,90,3
+3844,Away,1,44,0
+3844,Home,2,67,0
+3844,Away,2,70,0
+3845,Home,1,26,0
+3845,Home,2,50,0
+3846,Away,2,50,0
+3846,Away,2,51,0
+3846,Away,2,68,0
+3847,Away,1,38,0
+3848,Home,2,60,0
+3849,Home,2,58,0
+3850,Away,2,46,0
+3850,Away,2,67,0
+3851,Away,2,47,0
+3851,Away,2,52,0
+3851,Home,2,90,5
+3853,Away,1,4,0
+3853,Away,1,23,0
+3853,Home,1,40,0
+3854,Away,1,10,0
+3854,Home,2,48,0
+3854,Home,2,51,0
+3855,Away,1,10,0
+3855,Home,2,58,0
+3855,Home,2,70,0
+3855,Away,2,73,0
+3855,Away,2,85,0
+3855,Away,2,90,1
+3856,Away,1,26,0
+3856,Away,1,32,0
+3857,Away,1,5,0
+3857,Home,1,27,0
+3857,Home,2,90,1
+3858,Away,1,20,0
+3858,Home,1,26,0
+3858,Home,1,35,0
+3858,Away,1,44,0
+3858,Away,2,48,0
+3859,Home,2,90,2
+10502,Home,1,10,0
+10502,Home,1,45,1
+10502,Away,2,76,0
+10502,Home,2,81,0
+10503,Home,1,35,0
+10503,Home,2,57,0
+10503,Away,2,77,0
+10504,Home,1,44,0
+10504,Home,2,74,0
+10504,Home,2,90,1
+10504,Away,2,90,9
+10505,Home,1,38,0
+10505,Home,1,45,3
+10505,Home,2,57,0
+10506,Home,1,44,0
+10506,Away,2,55,0
+10507,Home,1,7,0
+10507,Home,1,13,0
+10507,Home,1,29,0
+10507,Home,1,36,0
+10507,Away,2,76,0
+10509,Home,1,17,0
+10509,Home,1,33,0
+10509,Home,2,51,0
+10509,Home,2,55,0
+10509,Away,2,58,0
+10509,Home,2,67,0
+10509,Home,2,90,2
+10510,Away,3,105,1
+10510,Home,4,117,0
+10511,Away,1,35,0
+10511,Away,2,73,0
+10511,Home,2,83,0
+10511,Home,2,90,11
+10512,Home,1,42,0
+10513,Away,1,17,0
+10513,Home,2,54,0
+10513,Away,2,78,0
+10514,Home,1,34,0
+10514,Home,1,39,0
+10514,Home,2,69,0
+10515,Home,1,5,0
+10515,Home,2,79,0
+10516,Home,1,7,0
+10516,Away,1,9,0
+10516,Home,1,42,0
+10517,Home,1,23,0
+10517,Home,1,36,0
+10517,Away,2,71,0
+10517,Away,2,80,0
+10517,Home,3,108,0
+10517,Away,4,118,0

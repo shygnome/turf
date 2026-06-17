@@ -177,5 +177,6 @@ pyrightconfig.json
 
 # Project specific ignores
 data/
+!data/wc2022_goals.csv
 output/
 CLAUDE.md
