@@ -25,6 +25,14 @@ class PrepareSpec:
 
 
 @dataclass
+class KloppySpec:
+    metadata_dir: str
+    rosters_dir: str
+    tracking_dir: str
+    tracking_ext: str = ".jsonl.bz2"
+
+
+@dataclass
 class DatasetEntry:
     id: str
     name: str
@@ -32,6 +40,7 @@ class DatasetEntry:
     path: str
     description: str
     prepare_spec: PrepareSpec | None = field(default=None)
+    kloppy_spec: KloppySpec | None = field(default=None)
 
 
 CATALOG: list[DatasetEntry] = [
@@ -48,6 +57,11 @@ CATALOG: list[DatasetEntry] = [
                 "tracking_data_path": "Tracking Data",
             },
             metadata_path="Metadata",
+        ),
+        kloppy_spec=KloppySpec(
+            metadata_dir="Metadata",
+            rosters_dir="Rosters",
+            tracking_dir="Tracking Data",
         ),
     ),
     DatasetEntry(
