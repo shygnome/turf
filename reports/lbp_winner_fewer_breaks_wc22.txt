@@ -1,0 +1,77 @@
+LBP Analysis — FIFA World Cup 2022 (Men's)
+Matches where the WINNING team had FEWER line-breaking passes per 30 min IP
+Generated: 2026-06-22
+========================================================================
+
+Dataset   : pff/fifa-wc-2022
+Metric    : all successful line-breaking passes / (possession min / 30)
+Possession: kloppy tracking (dead-ball excluded)
+Passes    : successful only (subtype = success)
+
+Summary
+-------
+Decisive matches      : 49
+Winner had fewer LBP  : 25  (51%)
+Winner had more LBP   : 24  (49%)
+
+Full table (sorted by diff = winner_per30 - loser_per30, most extreme first)
+-----------------------------------------------------------------------------
+match_id  home              away              score  winner  W_lbp  L_lbp  W_poss  L_poss  W/30    L/30    diff
+--------  ----              ----              -----  ------  -----  -----  ------  ------  ----    ----    ----
+10507     Brazil            South Korea       4-1    HOME     109    108    46.3    33.9    70.60   95.49  -24.89
+3833      Poland            Saudi Arabia      2-0    HOME      51    113    31.3    47.7    48.83   71.10  -22.27
+3859      Cameroon          Brazil            1-0    HOME      56    121    33.2    51.5    50.61   70.47  -19.86
+3821      Germany           Japan             1-2    AWAY      47    145    25.2    58.4    56.05   74.55  -18.50
+3848      Australia         Denmark           1-0    HOME      62    124    30.2    47.5    61.64   78.27  -16.62
+3854      Japan             Spain             2-1    HOME      38    164    18.8    64.1    60.66   76.77  -16.11
+10515     France            Morocco           2-0    HOME      65    104    35.9    45.2    54.26   68.97  -14.70
+3841      South Korea       Ghana             2-3    AWAY      57    106    31.3    47.0    54.60   67.73  -13.14
+3828      Wales             Iran              0-2    AWAY      53     96    35.2    50.3    45.13   57.23  -12.10
+3832      Tunisia           Australia         0-1    AWAY      67     97    36.8    44.5    54.59   65.35  -10.76
+10512     Morocco           Portugal          1-0    HOME      46    109    26.3    51.8    52.46   63.19  -10.73
+3857      South Korea       Portugal          2-1    HOME      66     85    38.1    40.7    52.02   62.71  -10.70
+3844      Ecuador           Senegal           1-2    AWAY      57     76    36.7    40.1    46.58   56.85  -10.27
+3837      Belgium           Morocco           0-2    AWAY      47     91    30.3    48.1    46.48   56.70  -10.22
+3836      Japan             Costa Rica        0-1    AWAY      62     86    38.2    44.4    48.63   58.04   -9.41
+10514     Argentina         Croatia           3-0    HOME      67    110    32.7    46.9    61.50   70.41   -8.92
+3834      France            Denmark           2-1    HOME      94    101    40.7    38.9    69.22   77.84   -8.62
+3819      France            Australia         4-1    HOME     102     70    49.5    29.9    61.86   70.20   -8.35
+3823      Belgium           Canada            1-0    HOME      54     63    41.3    39.8    39.22   47.50   -8.29
+3858      Serbia            Switzerland       2-3    AWAY      74     85    39.3    40.3    56.43   63.21   -6.78
+10509     Portugal          Switzerland       6-1    HOME      78     83    37.2    36.1    62.85   68.90   -6.05
+3853      Canada            Morocco           1-2    AWAY      58     75    36.3    43.6    47.99   51.62   -3.63
+10504     France            Poland            3-1    HOME      93     83    43.5    37.5    64.18   66.41   -2.23
+3843      Portugal          Uruguay           2-0    HOME     105     63    52.5    30.6    59.97   61.75   -1.78
+3842      Brazil            Switzerland       1-0    HOME      92     64    48.9    33.8    56.41   56.79   -0.38
+
+Columns: W/30 = winner LBP per 30 min IP, L/30 = loser LBP per 30 min IP
+         W_poss / L_poss = possession time in minutes
+
+Key Observations
+----------------
+1. Low-block / counter-attack pattern (extreme cases)
+   Japan 2-1 Germany  (3821): Japan had only 25 min possession but 56 LBP/30 — deep
+   defending then fast transitions. Germany had 145 raw LBPs in 58 min but lost.
+   Japan 2-1 Spain    (3854): Japan had only 19 min possession — lowest in the dataset.
+   38 raw LBPs but 61/30 due to minimal time on ball.
+   Cameroon 1-0 Brazil (3859): Cameroon sat deep (33 min poss), Brazil dominated
+   with 121 LBPs but could not convert.
+
+2. Possession-inflation effect
+   Teams that are losing tend to press higher and get more line-breaking opportunities
+   in the second half, inflating their LBP/30 rate while the winning team manages the
+   game. This creates a reverse causality: losing -> more LBP, not more LBP -> losing.
+   Examples: Brazil 4-1 Korea (10507), Poland 2-0 Saudi Arabia (3833).
+
+3. Notable finalist appearances
+   Argentina 3-0 Croatia (10514): Croatia had 110 LBPs in 47 min (70/30) vs
+   Argentina's 67 in 33 min (62/30). Argentina won convincingly despite fewer LBP/30.
+   France 2-0 Morocco (10515), France 2-1 Denmark (3834), France 4-1 Australia (3819):
+   France won three matches with fewer LBP/30 — suggests France's defensive solidity
+   and counter-attacking efficiency over raw line-breaking volume.
+
+4. Implication for the metric
+   The per-30-min normalisation does not fully remove the tactical context effect.
+   Trailing teams chase the game and generate higher LBP rates in garbage time.
+   A time-weighted or phase-of-play split (e.g. score-state adjusted) may better
+   isolate the causal signal from the noise.

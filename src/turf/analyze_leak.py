@@ -287,7 +287,9 @@ def around_stats(
             continue
 
         lm = pd.read_csv(csv_path)
+        lm = lm[lm["subtype"] == "success"].copy()
         is_breaking = lm["is_line_breaking"].astype(bool)
+        lm["_all"] = is_breaking
         lm["_any"] = is_breaking & lm["direction_per_line"].apply(_has_any_around)
         lm["_adv"] = is_breaking & lm["direction_per_line"].apply(_is_advanced_around)
 
@@ -297,11 +299,11 @@ def around_stats(
         )
         if not poss_path.exists():
             typer.echo(
-                f"Possession summary missing for match {match_id}. "
-                "Run `turf dataset possession` first.",
+                f"[skip] match {match_id}: possession summary missing "
+                "(run `turf dataset possession` first).",
                 err=True,
             )
-            raise typer.Exit(1)
+            continue
         poss = pd.read_csv(poss_path)
 
         n_loaded += 1
@@ -314,6 +316,7 @@ def around_stats(
                     "match_id": match_id,
                     "team": team,
                     "poss_min": poss_sec / 60.0,
+                    "all_breaks": int(t["_all"].sum()),
                     "around_any": int(t["_any"].sum()),
                     "around_adv": int(t["_adv"].sum()),
                 }
@@ -324,13 +327,13 @@ def around_stats(
         raise typer.Exit(1)
 
     df = pd.DataFrame(records)
-    for col in ("around_any", "around_adv"):
+    for col in ("all_breaks", "around_any", "around_adv"):
         df[f"{col}_per_30"] = df[col] / (df["poss_min"] / 30)
 
     pivot = df.pivot(
         index="match_id",
         columns="team",
-        values=["around_any_per_30", "around_adv_per_30"],
+        values=["all_breaks_per_30", "around_any_per_30", "around_adv_per_30"],
     )
     pivot.columns = pd.Index([f"{c}_{t.lower()}" for c, t in pivot.columns])
     pivot = pivot.merge(
@@ -377,8 +380,9 @@ def around_stats(
     typer.echo(sep)
 
     for label, col in (
-        ("Scenario 1 - any around break", "around_any"),
-        ("Scenario 2 - most advanced line only", "around_adv"),
+        ("Scenario 0 - all line breaks (any direction)", "all_breaks"),
+        ("Scenario 1 - around breaks (any line)", "around_any"),
+        ("Scenario 2 - around break (most advanced line only)", "around_adv"),
     ):
         win_pct, avg_diff, n_clear = _win_stats(col)
         typer.echo(f"\n{label}")

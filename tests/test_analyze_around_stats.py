@@ -201,6 +201,11 @@ class TestAroundStatsExitCode:
 
 
 class TestAroundStatsOutput:
+    def test_shows_scenario_0(self, around_stats_dir: tuple) -> None:
+        out, goals = around_stats_dir
+        result = _invoke(out, goals)
+        assert "Scenario 0" in result.output
+
     def test_shows_scenario_1(self, around_stats_dir: tuple) -> None:
         out, goals = around_stats_dir
         result = _invoke(out, goals)
@@ -226,11 +231,11 @@ class TestAroundStatsOutput:
 
 
 class TestAroundStatsValues:
-    def test_win_rate_100_pct_both_scenarios(self, around_stats_dir: tuple) -> None:
+    def test_win_rate_100_pct_all_scenarios(self, around_stats_dir: tuple) -> None:
         out, goals = around_stats_dir
         result = _invoke(out, goals)
-        # Both scenarios: the team with more around breaks always wins
-        assert result.output.count("100.0%") == 2
+        # All three scenarios: the team with more breaks always wins
+        assert result.output.count("100.0%") == 3
 
     def test_scenario1_avg_diff_approx_2_67(self, around_stats_dir: tuple) -> None:
         """Sc1 diff = (5/1.5 + 3/1.5) / 2 = 2.67"""
