@@ -6,6 +6,8 @@ from . import analyze_leak as _analyze_leak
 from . import dataset as _dataset
 from . import event as _event
 from . import match as _match
+from . import possession as _possession
+from . import ranking as _ranking
 from .prepare import prepare as _prepare_cmd
 
 app = typer.Typer(
@@ -17,8 +19,10 @@ app.add_typer(_dataset.app, name="dataset")
 app.add_typer(_match.app, name="match")
 app.add_typer(_event.app, name="event")
 app.add_typer(_analyze_leak.app, name="analyze")
+app.add_typer(_ranking.app, name="ranking")
 _analyze_leak.app.add_typer(_analyze_features.app, name="features")
 _dataset.app.command("prepare")(_prepare_cmd)
+_dataset.app.command("possession")(_possession.possession_command)
 
 
 @app.callback(invoke_without_command=True)

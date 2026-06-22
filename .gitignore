@@ -179,4 +179,5 @@ pyrightconfig.json
 data/
 !data/wc2022_goals.csv
 output/
+reports/
 CLAUDE.md

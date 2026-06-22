@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.10,<3.12"
 dependencies = [
+    "kloppy>=3.19.0",
     "mplsoccer>=1.6.1",
     "openstarlab-preprocessing>=0.1.54",
     "pillow>=12.2.0",

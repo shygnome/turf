@@ -11,7 +11,29 @@ _leak_app = typer.Typer(help="LEAK unit line detection.", no_args_is_help=True)
 app.add_typer(_leak_app, name="leak")
 
 _DEFAULT_OUTPUT_ROOT = Path("output")
+_DEFAULT_GOALS_PATH = Path("data/wc2022_goals.csv")
 _DEFAULT_VISUALIZE_LIMIT = 10
+
+
+def _has_any_around(direction_str: object) -> bool:
+    """True if direction_per_line contains at least one 'Around'."""
+    import ast
+
+    try:
+        return "Around" in ast.literal_eval(str(direction_str))
+    except (ValueError, SyntaxError):
+        return False
+
+
+def _is_advanced_around(direction_str: object) -> bool:
+    """True if the most-advanced line (first element) was beaten 'Around'."""
+    import ast
+
+    try:
+        dirs = ast.literal_eval(str(direction_str))
+        return bool(dirs) and dirs[0] == "Around"
+    except (ValueError, SyntaxError):
+        return False
 
 
 def get_output_root() -> Path:
@@ -209,6 +231,166 @@ def stats_pass(
                 f"  Period {period}  {v['breaking']:>4} / {v['total']:>4}"
                 f"  ({_pct(v['breaking'], v['total'])})"
             )
+
+    typer.echo("")
+
+
+@_leak_app.command("around-stats")
+def around_stats(
+    dataset_id: str = typer.Argument(..., help="Dataset ID from the catalog."),
+    goals_path: Path = typer.Option(  # noqa: B008
+        _DEFAULT_GOALS_PATH,
+        "--goals",
+        help="Path to goals CSV.",
+    ),
+    output_root: Path = typer.Option(  # noqa: B008
+        _DEFAULT_OUTPUT_ROOT,
+        "--output-root",
+        help="Root directory for output files.",
+    ),
+) -> None:
+    """Cross-match around-break win-rate statistics (two scenarios) for DATASET_ID."""
+    import pandas as pd
+
+    entry = next((e for e in CATALOG if e.id == dataset_id), None)
+    if entry is None:
+        typer.echo(f"Unknown dataset: {dataset_id}", err=True)
+        raise typer.Exit(1)
+
+    if not goals_path.exists():
+        typer.echo(f"Goals CSV not found: {goals_path}", err=True)
+        raise typer.Exit(1)
+
+    goals_raw = pd.read_csv(goals_path, comment="#")
+    score = (
+        goals_raw.groupby(["match_id", "scoring_team"])
+        .size()
+        .unstack(fill_value=0)
+        .reindex(columns=["Home", "Away"], fill_value=0)
+        .rename(columns={"Home": "home_goals", "Away": "away_goals"})
+    )
+
+    labeled_dir = output_root.resolve() / dataset_id
+    if not labeled_dir.exists():
+        typer.echo("No labeled data found.", err=True)
+        raise typer.Exit(1)
+
+    records: list[dict[str, object]] = []
+    n_loaded = 0
+    for match_path in sorted(labeled_dir.iterdir()):
+        csv_path = match_path / "pass" / "labeled_metadata.csv"
+        if not csv_path.exists():
+            continue
+        try:
+            match_id = int(match_path.name)
+        except ValueError:
+            continue
+
+        lm = pd.read_csv(csv_path)
+        lm = lm[lm["subtype"] == "success"].copy()
+        is_breaking = lm["is_line_breaking"].astype(bool)
+        lm["_all"] = is_breaking
+        lm["_any"] = is_breaking & lm["direction_per_line"].apply(_has_any_around)
+        lm["_adv"] = is_breaking & lm["direction_per_line"].apply(_is_advanced_around)
+
+        poss_path = (
+            output_root.resolve() / dataset_id / str(match_id)
+            / "possession_summary.csv"
+        )
+        if not poss_path.exists():
+            typer.echo(
+                f"[skip] match {match_id}: possession summary missing "
+                "(run `turf dataset possession` first).",
+                err=True,
+            )
+            continue
+        poss = pd.read_csv(poss_path)
+
+        n_loaded += 1
+        for team in ("Home", "Away"):
+            t = lm[lm["team"] == team]
+            col_sec = "home_sec" if team == "Home" else "away_sec"
+            poss_sec = float(poss[col_sec].sum())
+            records.append(
+                {
+                    "match_id": match_id,
+                    "team": team,
+                    "poss_min": poss_sec / 60.0,
+                    "all_breaks": int(t["_all"].sum()),
+                    "around_any": int(t["_any"].sum()),
+                    "around_adv": int(t["_adv"].sum()),
+                }
+            )
+
+    if not records:
+        typer.echo("No labeled_metadata.csv files found.", err=True)
+        raise typer.Exit(1)
+
+    df = pd.DataFrame(records)
+    for col in ("all_breaks", "around_any", "around_adv"):
+        df[f"{col}_per_30"] = df[col] / (df["poss_min"] / 30)
+
+    pivot = df.pivot(
+        index="match_id",
+        columns="team",
+        values=["all_breaks_per_30", "around_any_per_30", "around_adv_per_30"],
+    )
+    pivot.columns = pd.Index([f"{c}_{t.lower()}" for c, t in pivot.columns])
+    pivot = pivot.merge(
+        score[["home_goals", "away_goals"]],
+        left_index=True,
+        right_index=True,
+        how="inner",
+    )
+
+    def _win_stats(col: str) -> tuple[float, float, int]:
+        wins = 0
+        n_clear = 0
+        diffs: list[float] = []
+        for _, row in pivot.iterrows():
+            hg, ag = int(row["home_goals"]), int(row["away_goals"])
+            if hg > ag:
+                winner, loser = "home", "away"
+            elif ag > hg:
+                winner, loser = "away", "home"
+            else:
+                continue
+            h_rate: float = float(row[f"{col}_per_30_home"])
+            a_rate: float = float(row[f"{col}_per_30_away"])
+            w_rate = float(row[f"{col}_per_30_{winner}"])
+            l_rate = float(row[f"{col}_per_30_{loser}"])
+            diffs.append(w_rate - l_rate)
+            if h_rate != a_rate:
+                n_clear += 1
+                more = "home" if h_rate > a_rate else "away"
+                if more == winner:
+                    wins += 1
+        win_pct = wins / n_clear * 100 if n_clear else float("nan")
+        avg_diff = sum(diffs) / len(diffs) if diffs else float("nan")
+        return win_pct, avg_diff, n_clear
+
+    n_decisive = sum(
+        1 for _, r in pivot.iterrows()
+        if int(r["home_goals"]) != int(r["away_goals"])
+    )
+
+    sep = "-" * 56
+    typer.echo(f"\nAround-break analysis: {dataset_id}")
+    typer.echo(f"Labeled matches: {n_loaded}  |  Decisive results: {n_decisive}")
+    typer.echo(sep)
+
+    for label, col in (
+        ("Scenario 0 - all line breaks (any direction)", "all_breaks"),
+        ("Scenario 1 - around breaks (any line)", "around_any"),
+        ("Scenario 2 - around break (most advanced line only)", "around_adv"),
+    ):
+        win_pct, avg_diff, n_clear = _win_stats(col)
+        typer.echo(f"\n{label}")
+        typer.echo(
+            f"  Win rate (more around => won) : {win_pct:>6.1f}%"
+            f"  (of {n_clear} decisive matches with unequal rates)"
+        )
+        typer.echo(f"  Avg (winner - loser) /30 min  : {avg_diff:>6.2f}")
 
     typer.echo("")
 
