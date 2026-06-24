@@ -28,7 +28,62 @@ from __future__ import annotations
 import bisect
 from enum import Enum
 
-__all__ = ["ZoneScheme", "assign_zone"]
+__all__ = [
+    "ZoneScheme",
+    "assign_zone",
+    "GUARDIOLA_ZONE_NUMBER",
+    "GUARDIOLA_ZONE_BOUNDS",
+]
+
+
+# ── Guardiola zone metadata ───────────────────────────────────────────────────
+# Numbers match the draw_zones.py visual: z1-6 = L-Flank, z7-12 = R-Flank,
+# z13-14 = L-HalfSpace, z15-16 = Center, z17-18 = R-HalfSpace, z19-20 = GK boxes.
+
+GUARDIOLA_ZONE_NUMBER: dict[str, int] = {
+    # L-Flank (y < -20.16), columns def → att
+    "pg_lf_d_box": 1,   "pg_lf_d_mid": 2,  "pg_lf_m_def": 3,
+    "pg_lf_m_att": 4,   "pg_lf_a_mid": 5,  "pg_lf_a_box": 6,
+    # R-Flank (y > +20.16), columns def → att
+    "pg_rf_d_box": 7,   "pg_rf_d_mid": 8,  "pg_rf_m_def": 9,
+    "pg_rf_m_att": 10,  "pg_rf_a_mid": 11, "pg_rf_a_box": 12,
+    # Inner lanes, def half then att half
+    "pg_lhs_def": 13,   "pg_lhs_att": 14,
+    "pg_ctr_def": 15,   "pg_ctr_att": 16,
+    "pg_rhs_def": 17,   "pg_rhs_att": 18,
+    # GK boxes (span all inner lanes)
+    "pg_gk_def": 19,    "pg_gk_att": 20,
+}
+
+# (x_min, x_max, y_min, y_max) in SkillCorner metres for each zone.
+GUARDIOLA_ZONE_BOUNDS: dict[str, tuple[float, float, float, float]] = {
+    # L-Flank
+    "pg_lf_d_box": (-52.5, -36.0, -34.0,  -20.16),
+    "pg_lf_d_mid": (-36.0, -18.0, -34.0,  -20.16),
+    "pg_lf_m_def": (-18.0,   0.0, -34.0,  -20.16),
+    "pg_lf_m_att": (  0.0,  18.0, -34.0,  -20.16),
+    "pg_lf_a_mid": ( 18.0,  36.0, -34.0,  -20.16),
+    "pg_lf_a_box": ( 36.0,  52.5, -34.0,  -20.16),
+    # R-Flank
+    "pg_rf_d_box": (-52.5, -36.0,  20.16,  34.0),
+    "pg_rf_d_mid": (-36.0, -18.0,  20.16,  34.0),
+    "pg_rf_m_def": (-18.0,   0.0,  20.16,  34.0),
+    "pg_rf_m_att": (  0.0,  18.0,  20.16,  34.0),
+    "pg_rf_a_mid": ( 18.0,  36.0,  20.16,  34.0),
+    "pg_rf_a_box": ( 36.0,  52.5,  20.16,  34.0),
+    # L-HalfSpace
+    "pg_lhs_def":  (-36.0,   0.0, -20.16,  -9.15),
+    "pg_lhs_att":  (  0.0,  36.0, -20.16,  -9.15),
+    # Center
+    "pg_ctr_def":  (-36.0,   0.0,  -9.15,   9.15),
+    "pg_ctr_att":  (  0.0,  36.0,  -9.15,   9.15),
+    # R-HalfSpace
+    "pg_rhs_def":  (-36.0,   0.0,   9.15,  20.16),
+    "pg_rhs_att":  (  0.0,  36.0,   9.15,  20.16),
+    # GK boxes — span all inner lanes in y
+    "pg_gk_def":   (-52.5, -36.0, -20.16,  20.16),
+    "pg_gk_att":   ( 36.0,  52.5, -20.16,  20.16),
+}
 
 
 class ZoneScheme(Enum):

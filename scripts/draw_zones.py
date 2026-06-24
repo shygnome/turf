@@ -5,8 +5,8 @@ Coordinate system: skillcorner — origin at pitch centre.
   y: -34.0 to +34.0  (touchline-to-touchline, bottom = negative)
 """
 
-import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import matplotlib.pyplot as plt
 from mplsoccer import Pitch
 
 PITCH_TYPE = "skillcorner"

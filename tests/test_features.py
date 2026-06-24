@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -224,10 +225,12 @@ class TestExtractPassFeatures:
         result = extract_pass_features(labeled_df, timeline, attack_dirs, match_id=3821)
         expected = {
             "event_idx", "match_id", "team", "period", "start_time",
+            "under_pressure",
             "is_line_breaking", "lines_broken_count", "pass_outcome",
             "zone_thirds", "zone_van_gaal", "zone_guardiola",
             "pass_distance", "pass_angle", "territory_entry", "score_diff",
-            "xt_gain",
+            "expected_xt_gain", "actual_xt_gain",
+            "expected_obpv_gain", "actual_obpv_gain",
         }
         assert expected.issubset(set(result.columns))
 
@@ -285,25 +288,44 @@ class TestExtractPassFeatures:
         assert result.iloc[0]["score_diff"] == 0
         assert result.iloc[1]["score_diff"] == 0
 
-    def test_xt_gain_positive_for_completed_forward_pass(
+    def test_actual_xt_gain_positive_for_completed_forward_pass(
         self,
         labeled_df: pd.DataFrame,
         attack_dirs: dict,
         timeline: dict,
     ) -> None:
         result = extract_pass_features(labeled_df, timeline, attack_dirs, match_id=3821)
-        # First pass: start_x=5 (t_mid), end_x=25 (t_att) → completed → positive gain
-        assert result.iloc[0]["xt_gain"] > 0
+        assert result.iloc[0]["actual_xt_gain"] > 0
 
-    def test_xt_gain_zero_for_incomplete_pass(
+    def test_actual_xt_gain_zero_for_incomplete_pass(
         self,
         labeled_df: pd.DataFrame,
         attack_dirs: dict,
         timeline: dict,
     ) -> None:
         result = extract_pass_features(labeled_df, timeline, attack_dirs, match_id=3821)
-        # Second pass: subtype=fail → gain must be 0
-        assert result.iloc[1]["xt_gain"] == pytest.approx(0.0)
+        assert result.iloc[1]["actual_xt_gain"] == pytest.approx(0.0)
+
+    def test_expected_xt_gain_nonzero_for_incomplete_pass(
+        self,
+        labeled_df: pd.DataFrame,
+        attack_dirs: dict,
+        timeline: dict,
+    ) -> None:
+        result = extract_pass_features(labeled_df, timeline, attack_dirs, match_id=3821)
+        # Second pass is incomplete but ball moved backward → expected gain is non-zero
+        assert result.iloc[1]["expected_xt_gain"] != pytest.approx(0.0)
+
+    def test_obpv_columns_nan_without_pass_dir(
+        self,
+        labeled_df: pd.DataFrame,
+        attack_dirs: dict,
+        timeline: dict,
+    ) -> None:
+        import math
+        result = extract_pass_features(labeled_df, timeline, attack_dirs, match_id=3821)
+        assert math.isnan(result.iloc[0]["expected_obpv_gain"])
+        assert math.isnan(result.iloc[0]["actual_obpv_gain"])
 
     def test_skips_rows_with_no_attack_dir(
         self,
@@ -339,3 +361,119 @@ class TestExtractPassFeatures:
             labeled_with_away, timeline, attack_dirs, match_id=3821
         )
         assert len(result) == 2  # Away row skipped
+
+    def test_under_pressure_false_without_lookup(
+        self,
+        labeled_df: pd.DataFrame,
+        attack_dirs: dict,
+        timeline: dict,
+    ) -> None:
+        result = extract_pass_features(labeled_df, timeline, attack_dirs, match_id=3821)
+        assert bool(result.iloc[0]["under_pressure"]) is False
+        assert bool(result.iloc[1]["under_pressure"]) is False
+
+    def test_under_pressure_from_lookup(
+        self,
+        labeled_df: pd.DataFrame,
+        attack_dirs: dict,
+        timeline: dict,
+    ) -> None:
+        from turf.pressure import PressureLookup
+        # Row 0: period=1, start_time=500 → key (1, 500, "Home") → True
+        # Row 1: period=1, start_time=600 → key (1, 600, "Home") → absent → False
+        lookup: PressureLookup = {(1, 500, "Home"): True}
+        result = extract_pass_features(
+            labeled_df, timeline, attack_dirs, match_id=3821, pressure_lookup=lookup
+        )
+        assert bool(result.iloc[0]["under_pressure"]) is True
+        assert bool(result.iloc[1]["under_pressure"]) is False
+
+
+class TestExtractPassFeaturesWithTracking:
+    """Integration tests that provide synthetic tracking frames."""
+
+    @pytest.fixture()
+    def pass_dir(self, tmp_path: Path) -> Path:
+        """Write minimal frames_home.csv and frames_away.csv for event_idx 0."""
+        import math
+
+        event_dir = tmp_path / "0"
+        event_dir.mkdir()
+
+        home_rows = [
+            {
+                "frame": 0, "Period": 1, "Time [s]": 0.0,
+                "Home_1_x": 5.0, "Home_1_y": 0.0,
+                "Home_2_x": -10.0, "Home_2_y": 3.0,
+                "ball_x": 5.0, "ball_y": 0.0,
+            },
+            {
+                "frame": 1, "Period": 1, "Time [s]": 0.04,
+                "Home_1_x": 5.2, "Home_1_y": 0.0,
+                "Home_2_x": -9.8, "Home_2_y": 3.0,
+                "ball_x": 10.0, "ball_y": 0.0,
+            },
+        ]
+        away_rows = [
+            {
+                "frame": 0, "Period": 1, "Time [s]": 0.0,
+                "Away_1_x": -15.0, "Away_1_y": 0.0,
+                "ball_x": 5.0, "ball_y": 0.0,
+            },
+            {
+                "frame": 1, "Period": 1, "Time [s]": 0.04,
+                "Away_1_x": -14.8, "Away_1_y": 0.0,
+                "ball_x": 10.0, "ball_y": 0.0,
+            },
+        ]
+        pd.DataFrame(home_rows).to_csv(event_dir / "frames_home.csv", index=False)
+        pd.DataFrame(away_rows).to_csv(event_dir / "frames_away.csv", index=False)
+
+        assert not math.isnan(0.0)  # sanity
+        return tmp_path
+
+    @pytest.fixture()
+    def single_pass_df(self) -> pd.DataFrame:
+        return pd.DataFrame([{
+            "event_idx": 0,
+            "period": 1,
+            "team": "Home",
+            "start_time": 0.0,
+            "start_x": 5.0,
+            "start_y": 0.0,
+            "inferred_end_x": 10.0,
+            "inferred_end_y": 0.0,
+            "subtype": "success",
+            "is_line_breaking": True,
+            "lines_broken_count": 1,
+        }])
+
+    def test_obpv_columns_finite_with_pass_dir(
+        self,
+        single_pass_df: pd.DataFrame,
+        pass_dir: Path,
+        timeline: dict,
+    ) -> None:
+        import math
+        attack_dirs = {(1, "Home"): 1}
+        result = extract_pass_features(
+            single_pass_df, timeline, attack_dirs, match_id=3821,
+            pass_dir=pass_dir,
+        )
+        assert not math.isnan(result.iloc[0]["expected_obpv_gain"])
+        assert not math.isnan(result.iloc[0]["actual_obpv_gain"])
+
+    def test_actual_obpv_gain_zero_for_incomplete(
+        self,
+        single_pass_df: pd.DataFrame,
+        pass_dir: Path,
+        timeline: dict,
+    ) -> None:
+        single_pass_df = single_pass_df.copy()
+        single_pass_df.loc[0, "subtype"] = "fail"
+        attack_dirs = {(1, "Home"): 1}
+        result = extract_pass_features(
+            single_pass_df, timeline, attack_dirs, match_id=3821,
+            pass_dir=pass_dir,
+        )
+        assert result.iloc[0]["actual_obpv_gain"] == pytest.approx(0.0)
