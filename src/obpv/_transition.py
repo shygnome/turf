@@ -1,4 +1,4 @@
-﻿"""Transition models: how likely is the ball to move to each pitch location."""
+"""Transition models: how likely is the ball to move to each pitch location."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class DummyTransitionModel(PitchSurfaceModel):
 
 
 class TransitionGaussModel(PitchSurfaceModel):
-    """Gaussian kernel centred on the ball â€” no data files required."""
+    """Gaussian kernel centred on the ball -- no data files required."""
 
     def __init__(self, sigma: float = 15.0) -> None:
         self.sigma = sigma
@@ -81,7 +81,7 @@ def _crop_transition_to_grid(
 
 
 class CsvTransitionModel(PitchSurfaceModel):
-    """Transition model from a pre-computed 64Ã—100 CSV grid (Transition_gauss.csv).
+    """Transition model from a pre-computed 64x100 CSV grid (Transition_gauss.csv).
 
     A (32, 50) window centred on the ball is extracted per frame.
     """
@@ -127,7 +127,7 @@ class CsvTransitionModel(PitchSurfaceModel):
 
 
 class _ZoneTransitionKernel:
-    """18-zone KDE transition kernel â€” load and predict only (no fit)."""
+    """18-zone KDE transition kernel -- load and predict only (no fit)."""
 
     def __init__(self) -> None:
         self.transition_distributions: dict[int, pd.DataFrame] = {}
@@ -184,7 +184,7 @@ class _ZoneTransitionKernel:
 class KernelTransitionModel(PitchSurfaceModel):
     """Transition model backed by 18-zone pre-computed KDE CSVs.
 
-    Load from a directory containing Area1_Transition.csv â€¦ Area18_Transition.csv.
+    Load from a directory containing Area1_Transition.csv ... Area18_Transition.csv.
     """
 
     def __init__(self, kernel: _ZoneTransitionKernel) -> None:

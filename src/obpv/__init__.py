@@ -1,4 +1,4 @@
-﻿"""obpv â€” Off-Ball Positioning Value for pass evaluation.
+"""obpv -- Off-Ball Positioning Value for pass evaluation.
 
 Public API
 ----------
@@ -7,12 +7,12 @@ PitchGrid                   configure the computation grid
 PPCFParameters              tune the PPCF pitch-control model
 OBPVAnalyzer                compute OBPV for a single frame
 FrameAnalysis               result of OBPVAnalyzer.analyze()
-compute_pass_obpv           OBPV gain = end snapshot âˆ’ start snapshot
+compute_pass_obpv           OBPV gain = end snapshot - start snapshot
 
 Transition models (optional, pass to OBPVAnalyzer directly)
 -----------------------------------------------------------
 TransitionGaussModel        Gaussian kernel, no data files (default)
-CsvTransitionModel          single pre-computed 64Ã—100 transition CSV
+CsvTransitionModel          single pre-computed 64x100 transition CSV
 KernelTransitionModel       18-zone KDE, requires Area*.csv files
 """
 

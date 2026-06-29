@@ -1,4 +1,4 @@
-﻿"""Pitch weight score model: sigmoidâ€“Gaussian heatmap biased toward attacking goal."""
+"""Pitch weight score model: sigmoid-Gaussian heatmap biased toward attacking goal."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def generate_heatmap_data(
     field_dimen: tuple[float, float] = (105.0, 68.0),
     n_grid_cells_x: int = 50,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    """Sigmoidâ€“Gaussian pitch weight heatmap, higher near the attacking goal.
+    """Sigmoid-Gaussian pitch weight heatmap, higher near the attacking goal.
 
     Returns
     -------
@@ -55,7 +55,7 @@ def generate_heatmap_data(
 
 
 class PitchWeightModel(PitchSurfaceModel):
-    """Score model based on a sigmoidâ€“Gaussian pitch weight heatmap.
+    """Score model based on a sigmoid-Gaussian pitch weight heatmap.
 
     Higher values near the attacking goal (sigmoid along x) with a Gaussian
     width centred on the pitch (y-axis). Attack direction applied per-frame.

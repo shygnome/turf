@@ -23,7 +23,7 @@ def _player_states(
     n = len(df)
     row = df.iloc[frame_idx]
 
-    # Determine adjacent row and Δt for velocity estimation.
+    # Determine adjacent row and deltat for velocity estimation.
     if n == 1:
         adj_row: pd.Series | None = None
         dt = 1.0
@@ -87,7 +87,7 @@ def frames_to_game_state(
     frame_idx:
         Row index to use (0 = pass start, ``len-1`` = pass end).
     attacking_team_id:
-        ``"Home"`` or ``"Away"`` — which team made the pass.
+        ``"Home"`` or ``"Away"`` -- which team made the pass.
     attack_dir:
         ``+1`` if the attacking team plays left-to-right in SkillCorner coords,
         ``-1`` if right-to-left.

@@ -1,4 +1,4 @@
-﻿"""OBPV gain for a single pass: two-snapshot difference."""
+"""OBPV gain for a single pass: two-snapshot difference."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ def compute_pass_obpv(
     """Return the OBPV gain of a pass.
 
     Computes the total OBPV surface (sum of all grid cells) at the pass start
-    and end frames, then returns end âˆ’ start.
+    and end frames, then returns end - start.
 
     Parameters
     ----------
@@ -32,7 +32,7 @@ def compute_pass_obpv(
     Returns
     -------
     float
-        OBPV gain = sum(OBPV surface at end) âˆ’ sum(OBPV surface at start).
+        OBPV gain = sum(OBPV surface at end) - sum(OBPV surface at start).
         Positive = pass moved the ball to a more threatening position.
     """
     obpv_start = analyzer.analyze(start_state).get_layer("obpv").values.sum()

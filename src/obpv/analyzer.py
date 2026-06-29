@@ -1,4 +1,4 @@
-﻿"""OBPVAnalyzer: single-frame OBPV computation."""
+"""OBPVAnalyzer: single-frame OBPV computation."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ class FrameAnalysis:
 class OBPVAnalyzer:
     """Computes Off-Ball Positioning Value (OBPV) for a single tracking frame.
 
-    OBPV = PPCF Ã— Transition Ã— PitchWeight (element-wise product).
+    OBPV = PPCF x Transition x PitchWeight (element-wise product).
 
     Parameters
     ----------
@@ -103,7 +103,7 @@ class OBPVAnalyzer:
         """Build an OBPVAnalyzer with the standard model stack.
 
         Uses ``KernelTransitionModel`` if *kernel_csv_dir* is provided (requires
-        Area1_Transition.csv â€¦ Area18_Transition.csv), otherwise falls back to
+        Area1_Transition.csv ... Area18_Transition.csv), otherwise falls back to
         ``TransitionGaussModel`` (sigma=15 m) which requires no data files.
         """
         if grid is None:
