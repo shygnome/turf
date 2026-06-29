@@ -105,3 +105,51 @@ class TestGuardiola:
 def test_unknown_scheme_raises() -> None:
     with pytest.raises((ValueError, AttributeError)):
         assign_zone(0.0, 0.0, "bad_scheme")  # type: ignore[arg-type]
+
+
+class TestGuardiolaZoneNumber:
+    def test_all_20_zones_have_a_number(self) -> None:
+        from turf.zone import GUARDIOLA_ZONE_NUMBER
+        assert len(GUARDIOLA_ZONE_NUMBER) == 20
+
+    def test_numbers_are_1_to_20(self) -> None:
+        from turf.zone import GUARDIOLA_ZONE_NUMBER
+        assert set(GUARDIOLA_ZONE_NUMBER.values()) == set(range(1, 21))
+
+    def test_known_assignments_match_draw_zones_order(self) -> None:
+        from turf.zone import GUARDIOLA_ZONE_NUMBER
+        # L-Flank first 6 zones
+        assert GUARDIOLA_ZONE_NUMBER["pg_lf_d_box"] == 1
+        assert GUARDIOLA_ZONE_NUMBER["pg_lf_a_box"] == 6
+        # R-Flank next 6 zones
+        assert GUARDIOLA_ZONE_NUMBER["pg_rf_d_box"] == 7
+        assert GUARDIOLA_ZONE_NUMBER["pg_rf_a_box"] == 12
+        # GK boxes last
+        assert GUARDIOLA_ZONE_NUMBER["pg_gk_def"] == 19
+        assert GUARDIOLA_ZONE_NUMBER["pg_gk_att"] == 20
+
+
+class TestGuardiolaZoneBounds:
+    def test_all_20_zones_have_bounds(self) -> None:
+        from turf.zone import GUARDIOLA_ZONE_BOUNDS
+        assert len(GUARDIOLA_ZONE_BOUNDS) == 20
+
+    def test_bounds_are_4_tuples(self) -> None:
+        from turf.zone import GUARDIOLA_ZONE_BOUNDS
+        for label, bounds in GUARDIOLA_ZONE_BOUNDS.items():
+            assert len(bounds) == 4, f"{label} should have 4 bounds"
+            x_min, x_max, y_min, y_max = bounds
+            assert x_min < x_max, f"{label}: x_min >= x_max"
+            assert y_min < y_max, f"{label}: y_min >= y_max"
+
+    def test_gk_def_spans_inner_lanes(self) -> None:
+        from turf.zone import GUARDIOLA_ZONE_BOUNDS
+        x_min, x_max, y_min, y_max = GUARDIOLA_ZONE_BOUNDS["pg_gk_def"]
+        assert x_min == pytest.approx(-52.5)
+        assert x_max == pytest.approx(-36.0)
+        assert y_min == pytest.approx(-20.16)
+        assert y_max == pytest.approx(20.16)
+
+    def test_bounds_keys_match_zone_number_keys(self) -> None:
+        from turf.zone import GUARDIOLA_ZONE_BOUNDS, GUARDIOLA_ZONE_NUMBER
+        assert set(GUARDIOLA_ZONE_BOUNDS.keys()) == set(GUARDIOLA_ZONE_NUMBER.keys())

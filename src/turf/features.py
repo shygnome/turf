@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pandas as pd  # type: ignore[import-untyped]
 
+from turf.pressure import PressureLookup
+from turf.xt import xt_at as _xt_at
 from turf.xt import xt_gain as _xt_gain
 from turf.zone import ZoneScheme, assign_zone
 
@@ -168,6 +170,72 @@ def build_attack_dir_cache(
     return cache
 
 
+# ── OBPV helpers ─────────────────────────────────────────────────────────────
+
+
+def _make_obpv_analyzer(analyzer: object | None) -> object | None:
+    """Return an OBPVAnalyzer if obpv is importable, else None."""
+    if analyzer is not None:
+        return analyzer
+    try:
+        from obpv._grid import PitchGrid  # noqa: PLC0415
+        from obpv.analyzer import OBPVAnalyzer  # noqa: PLC0415
+        grid = PitchGrid.from_resolution(n_x=25, n_y=16)
+        return OBPVAnalyzer.default(grid=grid)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _compute_obpv(
+    pass_dir: Path | None,
+    analyzer: object | None,
+    event_idx: int,
+    attacking_team_id: str,
+    attack_dir: int,
+    completed: bool,
+) -> tuple[float, float]:
+    """Return (expected_obpv_gain, actual_obpv_gain) for one pass.
+
+    Returns (nan, nan) when tracking frames are unavailable.
+    Limitation: for incomplete passes the end frame is the interception point,
+    not the intended target, so expected_obpv_gain underestimates pass ambition.
+    """
+    if pass_dir is None or analyzer is None:
+        return float("nan"), float("nan")
+
+    home_path = pass_dir / str(event_idx) / "frames_home.csv"
+    away_path = pass_dir / str(event_idx) / "frames_away.csv"
+    if not home_path.exists() or not away_path.exists():
+        return float("nan"), float("nan")
+
+    try:
+        import pandas as pd  # noqa: PLC0415
+
+        from obpv.bridge import frames_to_game_state  # noqa: PLC0415
+        from obpv.pass_obpv import compute_pass_obpv  # noqa: PLC0415
+
+        home_df = pd.read_csv(home_path)
+        away_df = pd.read_csv(away_path)
+        n = len(home_df)
+        if n == 0:
+            return float("nan"), float("nan")
+
+        start_state = frames_to_game_state(
+            home_df, away_df, 0, attacking_team_id, attack_dir
+        )
+        end_state = frames_to_game_state(
+            home_df, away_df, n - 1, attacking_team_id, attack_dir
+        )
+
+        from obpv.analyzer import OBPVAnalyzer  # noqa: PLC0415
+        assert isinstance(analyzer, OBPVAnalyzer)
+        expected = compute_pass_obpv(start_state, end_state, analyzer)
+        actual = expected if completed else 0.0
+        return expected, actual
+    except Exception:  # noqa: BLE001
+        return float("nan"), float("nan")
+
+
 # ── Main extraction function ──────────────────────────────────────────────────
 
 
@@ -176,6 +244,9 @@ def extract_pass_features(
     goals_timeline: dict[int, list[tuple[str, int, float]]],
     attack_dirs: dict[tuple[int, str], int],
     match_id: int,
+    pass_dir: Path | None = None,
+    analyzer: object | None = None,
+    pressure_lookup: PressureLookup | None = None,
 ) -> pd.DataFrame:
     """Extract covariates for all labeled passes in *labeled_df*.
 
@@ -184,6 +255,8 @@ def extract_pass_features(
 
     Returns a DataFrame with one row per included pass.
     """
+    _obpv_analyzer = _make_obpv_analyzer(analyzer)
+
     rows: list[dict[str, object]] = []
     for _, row in labeled_df.iterrows():
         period = int(row["period"])
@@ -196,20 +269,35 @@ def extract_pass_features(
         sx, sy = float(row["start_x"]), float(row["start_y"])
         ex = float(row["inferred_end_x"])
         ey = float(row["inferred_end_y"])
+        event_idx = int(row["event_idx"])
+        completed = str(row["subtype"]) == "success"
 
         norm_sx, norm_sy = normalize_coords(sx, sy, attack_dir)
         norm_ex, norm_ey = normalize_coords(ex, ey, attack_dir)
 
+        under_pressure: bool = (
+            pressure_lookup.get((period, int(time_s), team), False)
+            if pressure_lookup is not None
+            else False
+        )
+
+        is_lbp = bool(row["is_line_breaking"])
+        expected_obpv, actual_obpv = _compute_obpv(
+            pass_dir if is_lbp else None,
+            _obpv_analyzer, event_idx, team, attack_dir, completed,
+        )
+
         rows.append(
             {
-                "event_idx": int(row["event_idx"]),
+                "event_idx": event_idx,
                 "match_id": match_id,
                 "team": team,
                 "period": period,
                 "start_time": time_s,
+                "under_pressure": under_pressure,
                 "is_line_breaking": bool(row["is_line_breaking"]),
                 "lines_broken_count": int(row["lines_broken_count"]),
-                "pass_outcome": str(row["subtype"]) == "success",
+                "pass_outcome": completed,
                 "zone_thirds": assign_zone(norm_sx, norm_sy, ZoneScheme.THIRDS),
                 "zone_van_gaal": assign_zone(norm_sx, norm_sy, ZoneScheme.VAN_GAAL),
                 "zone_guardiola": assign_zone(norm_sx, norm_sy, ZoneScheme.GUARDIOLA),
@@ -219,10 +307,12 @@ def extract_pass_features(
                 "score_diff": score_diff(
                     goals_timeline, match_id, period, time_s, team
                 ),
-                "xt_gain": _xt_gain(
-                    norm_sx, norm_sy, norm_ex, norm_ey,
-                    completed=str(row["subtype"]) == "success",
+                "expected_xt_gain": _xt_at(norm_ex, norm_ey) - _xt_at(norm_sx, norm_sy),
+                "actual_xt_gain": _xt_gain(
+                    norm_sx, norm_sy, norm_ex, norm_ey, completed=completed
                 ),
+                "expected_obpv_gain": expected_obpv,
+                "actual_obpv_gain": actual_obpv,
             }
         )
 
