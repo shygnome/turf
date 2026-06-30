@@ -121,7 +121,10 @@ class PPCFPitchControlModel(PitchSurfaceModel):
         ])  # (n_players, 2)
         diff = targets[None, :, :] - react_positions[:, None, :]  # (n, n_cells, 2)
         dists = np.linalg.norm(diff, axis=-1)  # (n, n_cells)
-        return self.params.reaction_time + dists / self.params.max_player_speed
+        return np.asarray(
+            self.params.reaction_time + dists / self.params.max_player_speed,
+            dtype=np.float64,
+        )
 
     def _compute_vectorized(
         self,
@@ -146,8 +149,12 @@ class PPCFPitchControlModel(PitchSurfaceModel):
         tti_att = self._ttis_all_cells(attacking_players, targets)  # (n_att, n_cells)
         tti_def = self._ttis_all_cells(defending_players, targets)  # (n_def, n_cells)
 
-        tau_min_att = tti_att.min(axis=0) if len(attacking_players) else np.full(n_cells, np.inf)
-        tau_min_def = tti_def.min(axis=0) if len(defending_players) else np.full(n_cells, np.inf)
+        tau_min_att = (
+            tti_att.min(axis=0) if len(attacking_players) else np.full(n_cells, np.inf)
+        )
+        tau_min_def = (
+            tti_def.min(axis=0) if len(defending_players) else np.full(n_cells, np.inf)
+        )
 
         gap_att = tau_min_att - np.maximum(ball_times, tau_min_def)
         gap_def = tau_min_def - np.maximum(ball_times, tau_min_att)
