@@ -5,8 +5,8 @@ import warnings
 import pandas as pd
 import pytest
 
-from turf.event_extractor import EventExtractor
-from turf.match_loader import MatchData
+from turf.io.event_extractor import EventExtractor
+from turf.io.match_loader import MatchData
 
 
 @pytest.fixture()

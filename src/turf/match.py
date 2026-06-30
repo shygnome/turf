@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 
 from turf.dataset import CATALOG, get_root
-from turf.match_loader import MatchLoader
+from turf.io.match_loader import MatchLoader
 from turf.paging import paginate
 
 app = typer.Typer(help="Work with individual match data.")

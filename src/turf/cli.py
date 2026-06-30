@@ -8,7 +8,7 @@ from . import event as _event
 from . import match as _match
 from . import possession as _possession
 from . import ranking as _ranking
-from .prepare import prepare as _prepare_cmd
+from .io.prepare import prepare as _prepare_cmd
 
 app = typer.Typer(
     name="turf",

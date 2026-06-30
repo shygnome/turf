@@ -4,7 +4,7 @@ Possession sequences are built from per-frame ball_owning_team_id and
 ball_state fields exposed by kloppy. Dead-ball frames (ball_state != 'alive')
 are excluded — they don't count toward either team's possession time.
 
-See turf.tracking for the underlying frame-level logic and corner-case TODOs.
+See turf.io.tracking for the underlying frame-level logic and corner-case TODOs.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import pandas as pd  # type: ignore[import-untyped]
 import typer
 
 from turf.dataset import CATALOG
-from turf.tracking import (
+from turf.io.tracking import (
     build_possession_sequences_from_tracking,
     load_tracking_frames,
 )

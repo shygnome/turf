@@ -5,8 +5,8 @@ from pathlib import Path
 import typer
 
 from turf.dataset import CATALOG, get_root
-from turf.event_extractor import EventExtractor
-from turf.match_loader import MatchLoader
+from turf.io.event_extractor import EventExtractor
+from turf.io.match_loader import MatchLoader
 
 app = typer.Typer(help="Work with match events.")
 

@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from turf.event_extractor import EventClip
 from turf.event_visualizer import EventVisualizer
+from turf.io.event_extractor import EventClip
 
 _FPS = 25.0
 

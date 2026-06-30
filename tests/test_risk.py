@@ -1,12 +1,11 @@
-"""Tests for turf.risk — bin-based expected xT risk model."""
+"""Tests for leak.risk — bin-based expected xT risk model."""
 
 from __future__ import annotations
 
 import pandas as pd
 import pytest
 
-from turf.risk import add_residuals, bucket_game_state, build_expected_xt
-
+from leak.risk import add_residuals, bucket_game_state, build_expected_xt
 
 # ── bucket_game_state ─────────────────────────────────────────────────────────
 
@@ -91,7 +90,9 @@ def test_add_residuals_values(features_df: pd.DataFrame, lbp_df: pd.DataFrame) -
     expected = build_expected_xt(lbp_df)
     result = add_residuals(features_df, expected)
     # t_def / level: expected = 0.02, observed = 0.03 → residual = 0.01
-    row = result[(result["zone_thirds"] == "t_def") & (result["score_diff"] == 0)].iloc[0]
+    row = result[
+        (result["zone_thirds"] == "t_def") & (result["score_diff"] == 0)
+    ].iloc[0]
     assert row["xt_expected"] == pytest.approx(0.02)
     assert row["xt_residual"] == pytest.approx(0.01)
 

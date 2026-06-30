@@ -66,7 +66,7 @@ def extract_features(
         build_score_timeline,
         extract_pass_features,
     )
-    from turf.pressure import load_match_pressure
+    from turf.io.pressure import load_match_pressure
 
     entry = next((e for e in CATALOG if e.id == dataset_id), None)
     if entry is None:
@@ -176,7 +176,7 @@ def compute_risk(
     """
     import pandas as pd
 
-    from turf.risk import add_residuals, build_expected_xt
+    from leak.risk import add_residuals, build_expected_xt
 
     entry = next((e for e in CATALOG if e.id == dataset_id), None)
     if entry is None:

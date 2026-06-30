@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd  # type: ignore[import-untyped]
 
-from turf.pressure import PressureLookup
+from turf.io.pressure import PressureLookup
 from turf.xt import xt_at as _xt_at
 from turf.xt import xt_gain as _xt_gain
 from turf.zone import ZoneScheme, assign_zone

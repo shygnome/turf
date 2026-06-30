@@ -1,11 +1,11 @@
-"""Tests for turf.tracking — build_possession_sequences_from_tracking."""
+"""Tests for turf.io.tracking — build_possession_sequences_from_tracking."""
 
 from __future__ import annotations
 
 import pandas as pd
 import pytest
 
-from turf.tracking import build_possession_sequences_from_tracking
+from turf.io.tracking import build_possession_sequences_from_tracking
 
 
 def _frames(

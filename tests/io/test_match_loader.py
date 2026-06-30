@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from turf.cli import app
-from turf.match_loader import MatchData, MatchLoader, normalize_period_times
+from turf.io.match_loader import MatchData, MatchLoader, normalize_period_times
 
 runner = CliRunner()
 

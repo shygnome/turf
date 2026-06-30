@@ -5,13 +5,13 @@ from typing import TYPE_CHECKING
 from matplotlib.animation import FuncAnimation
 from mplsoccer import Pitch  # type: ignore[import-untyped]
 
-from turf.tracking_utils import ball_xy, player_xy
+from turf.io.tracking_utils import ball_xy, player_xy
 
 if TYPE_CHECKING:
     import pandas as pd  # type: ignore[import-untyped]
     from matplotlib.figure import Figure
 
-    from turf.event_extractor import EventClip
+    from turf.io.event_extractor import EventClip
 
 _PITCH_TYPE = "skillcorner"
 _PITCH_LENGTH = 105  # metres; skillcorner pitch is centred at origin, ±52.5 × ±34

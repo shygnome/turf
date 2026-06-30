@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd  # type: ignore[import-untyped]
 
-    from turf.match_loader import MatchData
+    from turf.io.match_loader import MatchData
 
 
 @dataclass

@@ -176,7 +176,7 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python
 
 # Project specific ignores
-data/
+/data/
 !data/wc2022_goals.csv
 output/
 reports/
