@@ -11,7 +11,7 @@ from matplotlib.text import Text
 from mplsoccer import Pitch  # type: ignore[import-untyped]
 
 from leak.lines import smooth_line_assignments
-from turf.tracking_utils import ball_xy
+from turf.io.tracking_utils import ball_xy
 
 if TYPE_CHECKING:
     import pandas as pd  # type: ignore[import-untyped]

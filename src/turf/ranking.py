@@ -1,8 +1,8 @@
 """FIFA Men's World Ranking fetch and WC 2022 static snapshot.
 
-Static snapshot path: src/turf/fifa_ranking_wc22.csv
+Static snapshot path: src/turf/data/fifa_ranking_wc22.csv
 Generate it once with:
-  uv run turf ranking fetch id13792 --csv > src/turf/fifa_ranking_wc22.csv
+  uv run turf ranking fetch id13792 --csv > src/turf/data/fifa_ranking_wc22.csv
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import typer
 
 __all__ = ["RankingEntry", "fetch_rankings", "get_wc22_rankings"]
 
-_WC22_CSV = Path(__file__).parent / "fifa_ranking_wc22.csv"
+_WC22_CSV = Path(__file__).parent / "data" / "fifa_ranking_wc22.csv"
 
 _API_URL = "https://inside.fifa.com/api/ranking-overview?lang=en&dateId={date_id}&gender=M"
 _HEADERS = {

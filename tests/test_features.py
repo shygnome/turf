@@ -378,7 +378,7 @@ class TestExtractPassFeatures:
         attack_dirs: dict,
         timeline: dict,
     ) -> None:
-        from turf.pressure import PressureLookup
+        from turf.io.pressure import PressureLookup
         # Row 0: period=1, start_time=500 → key (1, 500, "Home") → True
         # Row 1: period=1, start_time=600 → key (1, 600, "Home") → absent → False
         lookup: PressureLookup = {(1, 500, "Home"): True}

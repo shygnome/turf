@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from turf.tracking_utils import ball_xy, player_xy
+from turf.io.tracking_utils import ball_xy, player_xy
 
 # ---------------------------------------------------------------------------
 # player_xy

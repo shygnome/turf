@@ -1,4 +1,4 @@
-"""Tests for turf.pressure — PFF JSON pressure lookup."""
+"""Tests for turf.io.pressure — PFF JSON pressure lookup."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from turf.pressure import load_match_pressure
+from turf.io.pressure import load_match_pressure
 
 
 def _write_json(tmp_path: Path, events: list[dict]) -> Path:
